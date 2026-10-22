@@ -757,9 +757,14 @@ async function runDetectionFrame() {
 }
 
 const OCR_BLACKLIST = [
-    // Power & Electrical
+    // Power & Electrical & Voltage
     'ADAPTER', 'INPUT', 'OUTPUT', 'WATT', '200W', '65W', '45W', '90W', '135W', '150W',
     '100-240V', '19.5V', '50-60HZ', 'SAFETY', 'REGULATORY', 'COMPLIANCE', 'LEVEL', 'EFFICIENCY', 'DIRECT', 'CURRENT', 'AC', 'DC',
+    '3.34A', '2.31A', '4.62A', 'DAYA',
+
+    // Dell Regulatory Model & Types (P169G, P169G003, etc.)
+    'P169G', 'P169G003', 'TYPE NO', 'TYPENO', 'REGULATORY MODEL', 'RMN', 'RATING',
+    'MFG YR', 'MFGYR', 'MFG', 'CREECHURCH', 'LONDON', 'EC3A', 'UK ONLY', 'ONE CREECHURCH',
     
     // Model & Hardware Brand Names (MUST NEVER BE CONFUSED WITH S/N)
     'PROBOOK', 'PR0B00K', 'ELITEBOOK', 'ELITEBK', 'LATITUDE', 'OPTIPLEX', 'PRECISION', 
@@ -776,7 +781,7 @@ const OCR_BLACKLIST = [
     // Certifications & Regulatory
     'MADE IN', 'CAN ICES', 'REV', 'CHIP', 'MEMORY', 'STARTUP', 'DISK',
     'MACINTOSH', 'MACOS', 'GOLDEN', 'GATE', 'VERSION', 'ABOUT', 'SYSTEM',
-    'HSTNN', 'TPN', '15-F20087', 'PA-1200', 'TPN-CA', 'PA-1', 'MSIP', 'R41'
+    'HSTNN', 'TPN', '15-F20087', 'PA-1200', 'TPN-CA', 'PA-1', 'MSIP', 'R41', 'ICES-3', 'NMB-3'
 ];
 
 let candidateOcrSn = null;
@@ -879,6 +884,20 @@ function isValidSerialNumber(token) {
     if (upper.endsWith('BOOK') || upper.endsWith('B00K')) return false;
     if (/^[0-9]+W$/.test(upper)) return false;
     if (/^(?:HSTNN|TPN|ADP|PA1|WKT|CAN|MSIP|R41)/.test(upper)) return false;
+
+    // Filter out Dell Regulatory Model formats (e.g. P169G, P169G003, P149G, P119G)
+    if (/^P\d{3}[A-Z](\d{3})?$/i.test(upper)) return false;
+
+    // Filter out UK Postcodes (e.g. EC3A5AF, EC3A, etc.)
+    if (/^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/i.test(upper)) return false;
+
+    // Filter out MFG Year / Date patterns (e.g. MFGYR2024, YR2024, 2024)
+    if (/^(?:MFG|YR|DOM)?202[0-9]$/i.test(upper)) return false;
+    if (/^(?:MFG|YR|DOM)/i.test(upper)) return false;
+
+    // Filter out Voltage / Current specs (e.g. 195V334A, 195V, 334A)
+    if (/\d+V\d+A/i.test(upper) || /^\d+(\.\d+)?(?:V|A)$/i.test(upper)) return false;
+
     return true;
 }
 
@@ -890,9 +909,30 @@ function extractSerialFromOcrText(text) {
     const cleanText = text.replace(/[\u2010\u2013\u2014]/g, '-');
 
     // 1. ระดับความสำคัญสูงสุด (Priority 1): มีคีย์เวิร์ดกำกับชัดเจน (Apple Support Style)
-    // เช่น "Serial number WVYF59WY7X", "S/N: 5CD238M2D5", "Service Tag: 4HG3KL2"
+    // 🎯 A) เจาะจง Dell ST:XXXXXXX หรือ ST XXXXXXX ก่อนเป็นอันดับ 1 (เช่น ST:H0XCY24 บนสติกเกอร์ Dell)
+    const dellStMatch = cleanText.match(/\bST[:\s#.-]+([A-Z0-9]{7})\b/i);
+    if (dellStMatch && dellStMatch[1]) {
+        let cand = disambiguateSerial(dellStMatch[1].trim().toUpperCase());
+        if (isValidSerialNumber(cand)) {
+            return { sn: cand, isLabeled: true };
+        }
+    }
+
+    // 🎯 B) Dell Express Service Code (EX:37061331052) -> แปลงเป็น 7-char Service Tag อัตโนมัติ (เช่น H0XCY24)
+    const dellExMatch = cleanText.match(/\bEX[:\s#.-]+([0-9]{10,11})\b/i);
+    if (dellExMatch && dellExMatch[1]) {
+        try {
+            const converted = parseInt(dellExMatch[1], 10).toString(36).toUpperCase();
+            if (converted.length === 7 && isValidSerialNumber(converted)) {
+                return { sn: converted, isLabeled: true };
+            }
+        } catch(e) {}
+    }
+
+    // C) คีย์เวิร์ดกำกับทั่วไป เช่น "Serial number WVYF59WY7X", "S/N: 5CD238M2D5", "Service Tag: 4HG3KL2"
     const labeledPatterns = [
-        /(?:Serial\s*(?:number|no|#|\.)?|S\/N[:\s#.]*|SN[:\s#.]*|Service\s*Tag[:\s#.]*)[:\s]*([A-Z0-9]{5,18})/i,
+        /(?:Service\s*Tag)[:\s#.-]*([A-Z0-9]{7})/i,
+        /(?:Serial\s*(?:number|no|#|\.)?|S\/N[:\s#.]*|SN[:\s#.]*)[:\s]*([A-Z0-9]{5,18})/i,
         /(?:S\/N|SN)[\s:]*([A-Z0-9]{7,15})/i
     ];
 
@@ -1001,29 +1041,49 @@ function sanitizeBarcodeSerial(raw) {
         if (match && match[1]) return match[1].toUpperCase();
     }
 
-    // 2. ป้องกันการสแกนโดนบาร์โค้ด MAC Address (อุปกรณ์เราเตอร์/Switch มักมีบาร์โค้ด MAC อยู่ติดกับ S/N)
+    // 2. ดึง Dell Service Tag จากข้อความบาร์โค้ดแบบ 2D DataMatrix (เช่น ST:H0XCY24 หรือ ST=H0XCY24)
+    const stMatch = s.match(/(?:ST|Service\s*Tag)[:=\s]+([A-Z0-9]{7})/i);
+    if (stMatch && stMatch[1]) return stMatch[1].toUpperCase();
+
+    // 3. Dell Express Service Code ในบาร์โค้ด (เช่น EX:37061331052 หรือเลข 10-11 หลัก)
+    const exMatch = s.match(/(?:EX|Express)[:=\s]+([0-9]{10,11})/i);
+    if (exMatch && exMatch[1]) {
+        try {
+            const converted = parseInt(exMatch[1], 10).toString(36).toUpperCase();
+            if (converted.length === 7) return converted;
+        } catch(e) {}
+    }
+    if (/^[0-9]{10,11}$/.test(s)) {
+        try {
+            const converted = parseInt(s, 10).toString(36).toUpperCase();
+            if (converted.length === 7) return converted;
+        } catch(e) {}
+    }
+
+    // 4. ป้องกันการสแกนโดนบาร์โค้ด MAC Address (อุปกรณ์เราเตอร์/Switch มักมีบาร์โค้ด MAC อยู่ติดกับ S/N)
     if (/^MAC[:\s\-_]/i.test(s) || /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(s)) {
         console.warn('⚠️ Scanned MAC Address barcode instead of S/N:', s);
         showToast('⚠️ สแกนโดนบาร์โค้ด MAC Address กรุณาเล็งแถบ S/N', 'warning');
         return null;
     }
 
-    // 3. ตัดรหัสควบคุมพิเศษของ GS1 / DataMatrix ออก (เช่น [)> 06 \x1e \x1d)
+    // 5. ตัดรหัสควบคุมพิเศษของ GS1 / DataMatrix ออก (เช่น [)> 06 \x1e \x1d)
     s = s.replace(/^\[\)>\x1e[0-9]{2}\x1d/i, '').replace(/[\x00-\x1f\x7f]/g, '');
 
-    // 4. ตัด Prefix บาร์โค้ดทั่วไป: (S), S/N:, SN:, SERVICE TAG:, SERNO:
-    s = s.replace(/^(?:\(S\)|S\/N|SN|SERVICE TAG|SERNO)[\s:\-_]*/i, '');
+    // 6. ตัด Prefix บาร์โค้ดทั่วไป: (S), S/N:, SN:, SERVICE TAG:, SERNO:, ST:
+    s = s.replace(/^(?:\(S\)|S\/N|SN|SERVICE TAG|SERNO|ST)[\s:\-_]*/i, '');
     s = s.trim().toUpperCase();
 
-    // 5. ตัด Prefix '1S' ของฮาร์ดแวร์ Lenovo (บาร์โค้ด Lenovo มักมี 1S นำหน้า แต่ในชีตมักบันทึกเฉพาะตัวจริง)
+    // 7. ตัด Prefix '1S' ของฮาร์ดแวร์ Lenovo (บาร์โค้ด Lenovo มักมี 1S นำหน้า แต่ในชีตมักบันทึกเฉพาะตัวจริง)
     if (/^1S[A-Z0-9]{7,16}$/.test(s)) {
         s = s.substring(2);
     }
 
-    // 6. กรองคำต้องห้าม
+    // 8. กรองคำต้องห้าม & ตรวจสอบความถูกต้อง
     if (OCR_BLACKLIST.some(w => s.includes(w))) return null;
+    if (!isValidSerialNumber(s)) return null;
 
-    // 7. ตรวจสอบความยาว S/N ที่ถูกต้อง (4-30 ตัวอักษร)
+    // 9. ตรวจสอบความยาว S/N ที่ถูกต้อง (4-30 ตัวอักษร)
     if (/^[A-Z0-9\-_]{4,30}$/.test(s)) {
         return s;
     }
@@ -1034,18 +1094,38 @@ function sanitizeSerial(raw) {
     if (!raw) return null;
     let s = String(raw).trim();
 
+    // Dell Support Tag URL
     if (s.includes('dell.com') || s.includes('tag=') || s.includes('ServiceTag=')) {
         const match = s.match(/(?:tag|ServiceTag)=([A-Z0-9]+)/i);
         if (match && match[1]) return match[1].toUpperCase();
     }
 
-    s = s.replace(/^(S\/N|SN|SERVICE TAG|SERNO|S\/N:|SN:)[\s:]+/i, '');
+    // Dell ST:XXXXXXX
+    const stMatch = s.match(/(?:ST|Service\s*Tag)[:=\s]+([A-Z0-9]{7})/i);
+    if (stMatch && stMatch[1]) return stMatch[1].toUpperCase();
+
+    // Dell Express Service Code
+    const exMatch = s.match(/(?:EX|Express)[:=\s]+([0-9]{10,11})/i);
+    if (exMatch && exMatch[1]) {
+        try {
+            const converted = parseInt(exMatch[1], 10).toString(36).toUpperCase();
+            if (converted.length === 7) return converted;
+        } catch(e) {}
+    }
+    if (/^[0-9]{10,11}$/.test(s)) {
+        try {
+            const converted = parseInt(s, 10).toString(36).toUpperCase();
+            if (converted.length === 7) return converted;
+        } catch(e) {}
+    }
+
+    s = s.replace(/^(?:S\/N|SN|SERVICE TAG|SERNO|ST)[\s:]*/i, '');
     s = s.trim().toUpperCase();
 
     if (OCR_BLACKLIST.some(w => s.includes(w))) return null;
     s = disambiguateSerial(s);
 
-    if (/^[A-Z0-9\-_]{4,25}$/.test(s)) {
+    if (isValidSerialNumber(s)) {
         return s;
     }
     return null;
@@ -2737,11 +2817,21 @@ async function getCachedAssetBySn(sn) {
     const cleanSn = String(sn).trim().toUpperCase();
     const candidates = [cleanSn];
 
-    // 1. Strip common prefixes: S/N:, SN:, (S), etc.
-    const noPrefix = cleanSn.replace(/^(?:\(S\)|S\/N|SN|SERVICE TAG|SERNO|S)[\s:\-_]*/i, '');
+    // 1. Strip common prefixes: S/N:, SN:, (S), SERVICE TAG:, ST:, etc.
+    const noPrefix = cleanSn.replace(/^(?:\(S\)|S\/N|SN|SERVICE TAG|SERNO|ST|S)[\s:\-_]*/i, '');
     if (noPrefix && !candidates.includes(noPrefix)) candidates.push(noPrefix);
 
-    // 2. Lenovo 1S prefix variation
+    // 2. Dell Express Service Code (ตัวเลข 10-11 หลัก แปลงเป็น 7-character Service Tag เช่น 37061331052 -> H0XCY24)
+    if (/^[0-9]{10,11}$/.test(cleanSn)) {
+        try {
+            const converted = parseInt(cleanSn, 10).toString(36).toUpperCase();
+            if (converted && converted.length === 7 && !candidates.includes(converted)) {
+                candidates.push(converted);
+            }
+        } catch(e) {}
+    }
+
+    // 3. Lenovo 1S prefix variation
     if (/^1S[A-Z0-9]{6,20}$/.test(cleanSn)) {
         const without1S = cleanSn.substring(2);
         if (!candidates.includes(without1S)) candidates.push(without1S);
@@ -2750,7 +2840,7 @@ async function getCachedAssetBySn(sn) {
         if (!candidates.includes(with1S)) candidates.push(with1S);
     }
 
-    // 3. Strip dashes and spaces
+    // 4. Strip dashes and spaces
     const noDash = cleanSn.replace(/[\s\-_]/g, '');
     if (noDash && !candidates.includes(noDash)) candidates.push(noDash);
 
