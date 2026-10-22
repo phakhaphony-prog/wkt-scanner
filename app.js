@@ -101,15 +101,35 @@ window.promptInstallPwa = function() {
 };
 
 // =========================================================================
-// 🔒 PIN Lock Screen Security System
+// 🔒 PIN Lock Screen Security System (SHA-256 Cryptographic Hash)
 // =========================================================================
-const STORAGE_KEY_PIN = 'wkt_pwa_master_pin';
+const STORAGE_KEY_PIN_HASH = 'wkt_pwa_master_pin_hash';
 const STORAGE_KEY_AUTH = 'wkt_pwa_auth_token';
-const DEFAULT_PIN = '8899';
+const PIN_SALT = 'WKT_SCANNER_SECURE_AUTH_SALT_998822';
+// Cryptographic Hash of the master PIN (Plaintext number is NOT stored in code)
+const DEFAULT_PIN_HASH = 'bf50f875c8ec485ce32c25c7947c9b64b826f098a64f7b876954c65fe504ad58';
 let currentPinInput = '';
 
-function getMasterPin() {
-    return localStorage.getItem(STORAGE_KEY_PIN) || DEFAULT_PIN;
+async function computePinHash(pin) {
+    if (!pin) return '';
+    try {
+        const msgBuffer = new TextEncoder().encode(PIN_SALT + String(pin));
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch(err) {
+        let h = 0;
+        const str = PIN_SALT + String(pin);
+        for (let i = 0; i < str.length; i++) {
+            h = ((h << 5) - h) + str.charCodeAt(i);
+            h |= 0;
+        }
+        return 'fb_' + Math.abs(h);
+    }
+}
+
+function getMasterPinHash() {
+    return localStorage.getItem(STORAGE_KEY_PIN_HASH) || DEFAULT_PIN_HASH;
 }
 
 function isAppUnlocked() {
@@ -145,12 +165,13 @@ window.handlePinDelete = function() {
     }
 };
 
-function verifyEnteredPin() {
-    const masterPin = getMasterPin();
+async function verifyEnteredPin() {
+    const masterHash = getMasterPinHash();
+    const enteredHash = await computePinHash(currentPinInput);
     const errorMsg = document.getElementById('pin-error-msg');
     const container = document.getElementById('pin-dots-container');
     
-    if (currentPinInput === masterPin) {
+    if (enteredHash === masterHash) {
         // Success
         localStorage.setItem(STORAGE_KEY_AUTH, 'unlocked_true');
         const dots = document.querySelectorAll('.pin-dot');
@@ -204,11 +225,12 @@ window.lockAppNow = function() {
     switchMainTab('scanner');
 };
 
-window.changePinCode = function() {
-    const currentPin = getMasterPin();
+window.changePinCode = async function() {
+    const masterHash = getMasterPinHash();
     const oldInput = prompt('กรุณากรอกรหัส PIN เดิมปัจจุบัน:');
     if (oldInput === null) return;
-    if (oldInput !== currentPin) {
+    const oldHash = await computePinHash(oldInput);
+    if (oldHash !== masterHash) {
         alert('❌ รหัส PIN เดิมไม่ถูกต้อง');
         return;
     }
@@ -223,7 +245,8 @@ window.changePinCode = function() {
         alert('❌ รหัสยืนยันไม่ตรงกัน');
         return;
     }
-    localStorage.setItem(STORAGE_KEY_PIN, newPin);
+    const newHash = await computePinHash(newPin);
+    localStorage.setItem(STORAGE_KEY_PIN_HASH, newHash);
     alert('✅ เปลี่ยนรหัสผ่าน PIN สำเร็จเรียบร้อย!');
 };
 
