@@ -69,8 +69,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize Barcode Reader engines
     await initBarcodeEngines();
 
-    // Start Live Camera automatically on launch
-    startLiveCamera();
+    // Check PIN Lock state
+    if (isAppUnlocked()) {
+        const overlay = document.getElementById('pin-lock-overlay');
+        if (overlay) overlay.classList.add('hidden');
+        startLiveCamera();
+    } else {
+        const overlay = document.getElementById('pin-lock-overlay');
+        if (overlay) overlay.classList.remove('hidden');
+    }
 
     // Sync sheet data in background if API URL is set
     if (apiUrl) {
@@ -94,9 +101,148 @@ window.promptInstallPwa = function() {
 };
 
 // =========================================================================
+// 🔒 PIN Lock Screen Security System
+// =========================================================================
+const STORAGE_KEY_PIN = 'wkt_pwa_master_pin';
+const STORAGE_KEY_AUTH = 'wkt_pwa_auth_token';
+const DEFAULT_PIN = '8899';
+let currentPinInput = '';
+
+function getMasterPin() {
+    return localStorage.getItem(STORAGE_KEY_PIN) || DEFAULT_PIN;
+}
+
+function isAppUnlocked() {
+    return localStorage.getItem(STORAGE_KEY_AUTH) === 'unlocked_true';
+}
+
+function updatePinDots() {
+    const dots = document.querySelectorAll('.pin-dot');
+    dots.forEach((dot, idx) => {
+        if (idx < currentPinInput.length) {
+            dot.className = 'w-4 h-4 rounded-full bg-blue-500 border-2 border-blue-400 shadow-sm shadow-blue-500/50 scale-110 transition-all duration-150 pin-dot';
+        } else {
+            dot.className = 'w-4 h-4 rounded-full border-2 border-neutral-600 transition-all duration-150 pin-dot';
+        }
+    });
+}
+
+window.handlePinKey = function(digit) {
+    if (currentPinInput.length >= 4) return;
+    currentPinInput += digit;
+    updatePinDots();
+    
+    // Auto-check when 4 digits reached
+    if (currentPinInput.length === 4) {
+        setTimeout(verifyEnteredPin, 100);
+    }
+};
+
+window.handlePinDelete = function() {
+    if (currentPinInput.length > 0) {
+        currentPinInput = currentPinInput.slice(0, -1);
+        updatePinDots();
+    }
+};
+
+function verifyEnteredPin() {
+    const masterPin = getMasterPin();
+    const errorMsg = document.getElementById('pin-error-msg');
+    const container = document.getElementById('pin-dots-container');
+    
+    if (currentPinInput === masterPin) {
+        // Success
+        localStorage.setItem(STORAGE_KEY_AUTH, 'unlocked_true');
+        const dots = document.querySelectorAll('.pin-dot');
+        dots.forEach(d => {
+            d.className = 'w-4 h-4 rounded-full bg-emerald-500 border-2 border-emerald-400 shadow-md shadow-emerald-500/60 scale-125 transition-all duration-200 pin-dot';
+        });
+        
+        setTimeout(() => {
+            const overlay = document.getElementById('pin-lock-overlay');
+            if (overlay) {
+                overlay.classList.add('opacity-0', 'pointer-events-none', '-translate-y-8');
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                }, 300);
+            }
+            // Start Camera
+            if (currentTab === 'scanner' && scannerMode === 'camera' && !scannerStream) {
+                startLiveCamera();
+            }
+        }, 200);
+    } else {
+        // Failed
+        if (errorMsg) errorMsg.classList.remove('opacity-0');
+        if (container) {
+            container.classList.add('shake-pin');
+            const dots = document.querySelectorAll('.pin-dot');
+            dots.forEach(d => {
+                d.className = 'w-4 h-4 rounded-full bg-rose-500 border-2 border-rose-400 shadow-sm shadow-rose-500/50 pin-dot';
+            });
+            setTimeout(() => {
+                container.classList.remove('shake-pin');
+                currentPinInput = '';
+                updatePinDots();
+                setTimeout(() => {
+                    if (errorMsg) errorMsg.classList.add('opacity-0');
+                }, 1500);
+            }, 450);
+        }
+    }
+}
+
+window.lockAppNow = function() {
+    localStorage.removeItem(STORAGE_KEY_AUTH);
+    stopLiveCamera();
+    currentPinInput = '';
+    updatePinDots();
+    const overlay = document.getElementById('pin-lock-overlay');
+    if (overlay) {
+        overlay.classList.remove('hidden', 'opacity-0', 'pointer-events-none', '-translate-y-8');
+    }
+    switchMainTab('scanner');
+};
+
+window.changePinCode = function() {
+    const currentPin = getMasterPin();
+    const oldInput = prompt('กรุณากรอกรหัส PIN เดิมปัจจุบัน:');
+    if (oldInput === null) return;
+    if (oldInput !== currentPin) {
+        alert('❌ รหัส PIN เดิมไม่ถูกต้อง');
+        return;
+    }
+    const newPin = prompt('กรุณากรอกรหัส PIN ใหม่ 4 หลัก (ตัวเลขเท่านั้น):');
+    if (newPin === null) return;
+    if (!/^\d{4}$/.test(newPin)) {
+        alert('❌ กรุณาระบุรหัส PIN เป็นตัวเลข 4 หลักเท่านั้น');
+        return;
+    }
+    const confirmPin = prompt('กรุณายืนยันรหัส PIN ใหม่อีกครั้ง:');
+    if (confirmPin !== newPin) {
+        alert('❌ รหัสยืนยันไม่ตรงกัน');
+        return;
+    }
+    localStorage.setItem(STORAGE_KEY_PIN, newPin);
+    alert('✅ เปลี่ยนรหัสผ่าน PIN สำเร็จเรียบร้อย!');
+};
+
+// Physical keyboard support for laptop / PC
+document.addEventListener('keydown', (e) => {
+    const overlay = document.getElementById('pin-lock-overlay');
+    if (!overlay || overlay.classList.contains('hidden')) return;
+    if (e.key >= '0' && e.key <= '9') {
+        handlePinKey(e.key);
+    } else if (e.key === 'Backspace') {
+        handlePinDelete();
+    }
+});
+
+// =========================================================================
 // 📷 Live Camera Management (Direct Native getUserMedia - 100% on iOS PWA)
 // =========================================================================
 async function startLiveCamera() {
+    if (!isAppUnlocked()) return;
     stopLiveCamera();
 
     const video = document.getElementById('scanner-video');
