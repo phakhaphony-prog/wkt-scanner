@@ -69,15 +69,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize Barcode Reader engines
     await initBarcodeEngines();
 
-    // Check PIN Lock state
-    if (isAppUnlocked()) {
-        const overlay = document.getElementById('pin-lock-overlay');
-        if (overlay) overlay.classList.add('hidden');
-        startLiveCamera();
-    } else {
-        const overlay = document.getElementById('pin-lock-overlay');
-        if (overlay) overlay.classList.remove('hidden');
+    // Check PIN Lock state: บังคับให้ใส่รหัส PIN ทุกครั้งที่เปิดเว็บ
+    const overlay = document.getElementById('pin-lock-overlay');
+    if (overlay) {
+        overlay.classList.remove('hidden', 'opacity-0', 'pointer-events-none', '-translate-y-8');
     }
+    stopLiveCamera(); // ยังไม่เปิดกล้องจนกว่าจะกรอก PIN ถูกต้อง
 
     // Sync sheet data in background if API URL is set
     if (apiUrl) {
@@ -132,8 +129,10 @@ function getMasterPinHash() {
     return localStorage.getItem(STORAGE_KEY_PIN_HASH) || DEFAULT_PIN_HASH;
 }
 
+let isAppUnlockedState = false; // เริ่มต้นล็อกเสมอทุกรอบที่เปิดเว็บ
+
 function isAppUnlocked() {
-    return localStorage.getItem(STORAGE_KEY_AUTH) === 'unlocked_true';
+    return isAppUnlockedState;
 }
 
 function updatePinDots() {
@@ -172,8 +171,8 @@ async function verifyEnteredPin() {
     const container = document.getElementById('pin-dots-container');
     
     if (enteredHash === masterHash) {
-        // Success
-        localStorage.setItem(STORAGE_KEY_AUTH, 'unlocked_true');
+        // Success: ปลดล็อกสำหรับรอบนี้
+        isAppUnlockedState = true;
         const dots = document.querySelectorAll('.pin-dot');
         dots.forEach(d => {
             d.className = 'w-4 h-4 rounded-full bg-emerald-500 border-2 border-emerald-400 shadow-md shadow-emerald-500/60 scale-125 transition-all duration-200 pin-dot';
@@ -214,7 +213,7 @@ async function verifyEnteredPin() {
 }
 
 window.lockAppNow = function() {
-    localStorage.removeItem(STORAGE_KEY_AUTH);
+    isAppUnlockedState = false;
     stopLiveCamera();
     currentPinInput = '';
     updatePinDots();
@@ -224,6 +223,18 @@ window.lockAppNow = function() {
     }
     switchMainTab('scanner');
 };
+
+// ล็อกหน้าจออัตโนมัติหากสลับแอพ หรือพับหน้าจอไปเกิน 30 วินาที
+let lastAppHiddenTimestamp = 0;
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        lastAppHiddenTimestamp = Date.now();
+    } else {
+        if (lastAppHiddenTimestamp && (Date.now() - lastAppHiddenTimestamp > 30000)) {
+            lockAppNow();
+        }
+    }
+});
 
 window.changePinCode = async function() {
     const masterHash = getMasterPinHash();
