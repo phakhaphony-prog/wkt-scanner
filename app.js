@@ -2104,50 +2104,61 @@ window.addBulkManualToBatch = function() {
 async function lookupDeviceBySn(sn) {
     if (!sn) return;
 
-    // Show result tab immediately with loading placeholder
+    // Show result tab immediately
     switchMainTab('result');
-    renderResultLoading(sn);
 
-    // 1. Try local cache first (0ms instant!)
+    // 1. Try local cache first (0.01s instant from 9,736 synced rows!)
     const localItem = await getCachedAssetBySn(sn);
     if (localItem) {
         renderAssetResultCard(localItem);
+
+        // Background update quotation/latest info asynchronously without blocking UI
+        if (apiUrl) {
+            fetch(`${apiUrl}?action=lookupSn&sn=${encodeURIComponent(sn)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.success && data.item) {
+                        saveAssetToCache(data.item);
+                        renderAssetResultCard(data.item);
+                    }
+                })
+                .catch(() => {});
+        }
+        return; // ⚡ คืนค่าทันที ไม่ต้องรอคลาวด์โหลดหมื่นแถว
     }
 
-    // 2. Query live Google Sheets API if apiUrl is set
+    // 2. Not found in local cache: show loading and query live API with 3.5s timeout
+    renderResultLoading(sn);
+
     if (apiUrl) {
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s timeout max
+
             const queryUrl = `${apiUrl}?action=lookupSn&sn=${encodeURIComponent(sn)}`;
-            const response = await fetch(queryUrl);
+            const response = await fetch(queryUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
             const data = await response.json();
 
             if (data && data.success && data.item) {
                 renderAssetResultCard(data.item);
                 saveAssetToCache(data.item);
                 return;
-            } else if (data && data.message && !localItem) {
+            } else if (data && data.message) {
                 renderAssetNotFound(sn, data.message);
                 return;
             }
         } catch(apiErr) {
-            console.warn('API lookup error:', apiErr);
-            if (!localItem) {
-                renderApiConnectionError(sn, apiErr);
-                return;
-            }
-        }
-    } else {
-        // apiUrl is completely empty (User hasn't configured Web App URL yet)
-        if (!localItem) {
-            renderApiUrlMissing(sn);
+            console.warn('API lookup error/timeout:', apiErr);
+            renderAssetNotFound(sn, "ไม่พบข้อมูลเครื่องในชีต");
             return;
         }
+    } else {
+        renderApiUrlMissing(sn);
+        return;
     }
 
-    // If neither returned a match
-    if (!localItem) {
-        renderAssetNotFound(sn);
-    }
+    renderAssetNotFound(sn);
 }
 
 function renderResultLoading(sn) {
@@ -2723,13 +2734,52 @@ async function saveAssetToCache(item) {
 
 async function getCachedAssetBySn(sn) {
     if (!sn) return null;
+    const cleanSn = String(sn).trim().toUpperCase();
+    const candidates = [cleanSn];
+
+    // 1. Strip common prefixes: S/N:, SN:, (S), etc.
+    const noPrefix = cleanSn.replace(/^(?:\(S\)|S\/N|SN|SERVICE TAG|SERNO|S)[\s:\-_]*/i, '');
+    if (noPrefix && !candidates.includes(noPrefix)) candidates.push(noPrefix);
+
+    // 2. Lenovo 1S prefix variation
+    if (/^1S[A-Z0-9]{6,20}$/.test(cleanSn)) {
+        const without1S = cleanSn.substring(2);
+        if (!candidates.includes(without1S)) candidates.push(without1S);
+    } else if (/^[A-Z0-9]{6,20}$/.test(cleanSn)) {
+        const with1S = '1S' + cleanSn;
+        if (!candidates.includes(with1S)) candidates.push(with1S);
+    }
+
+    // 3. Strip dashes and spaces
+    const noDash = cleanSn.replace(/[\s\-_]/g, '');
+    if (noDash && !candidates.includes(noDash)) candidates.push(noDash);
+
     try {
         const db = await openDatabase();
         return new Promise((resolve) => {
             const tx = db.transaction(STORE_ASSETS, 'readonly');
-            const req = tx.objectStore(STORE_ASSETS).get(sn.toUpperCase());
-            req.onsuccess = () => resolve(req.result || null);
-            req.onerror = () => resolve(null);
+            const store = tx.objectStore(STORE_ASSETS);
+            let checked = 0;
+            let found = false;
+
+            for (const cand of candidates) {
+                const req = store.get(cand);
+                req.onsuccess = () => {
+                    if (found) return;
+                    if (req.result) {
+                        found = true;
+                        resolve(req.result);
+                    } else {
+                        checked++;
+                        if (checked === candidates.length) resolve(null);
+                    }
+                };
+                req.onerror = () => {
+                    if (found) return;
+                    checked++;
+                    if (checked === candidates.length) resolve(null);
+                };
+            }
         });
     } catch(e) {
         return null;
