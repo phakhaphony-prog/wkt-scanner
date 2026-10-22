@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="th" class="dark h-full bg-black">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>WKT S/N Scanner - เช็คสต็อก</title>
+    
+    <!-- PWA & Apple iOS Standalone Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="WKT Scan">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+
+    <!-- Fonts: Inter & SF Pro fallback -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'Noto Sans Thai', 'sans-serif'],
+                        mono: ['SF Mono', 'Menlo', 'Monaco', 'Courier New', 'monospace']
+                    },
+                    colors: {
+                        ios: {
+                            bg: '#000000',
+                            card: '#1c1c1e',
+                            cardHover: '#2c2c2e',
+                            separator: '#38383a',
+                            blue: '#007aff',
+                            green: '#34c759',
+                            red: '#ff3b30',
+                            amber: '#ff9500'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- ZXing Library for high-accuracy 1D & 2D barcode decoding -->
+    <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+
+    <!-- Tesseract.js for Apple-Style Live Text OCR (reads Serial Number text directly from screens and labels) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+    <style>
+        /* Safe Area Insets for iPhone Dynamic Island & Home Bar */
+        :root {
+            --sat: env(safe-area-inset-top, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+        }
+        body {
+            padding-top: var(--sat);
+            padding-bottom: var(--sab);
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        input, textarea {
+            user-select: auto;
+            -webkit-user-select: auto;
+        }
+
+        /* Laser Scanline Animation */
+        @keyframes laserSweep {
+            0% { top: 12%; opacity: 0.85; }
+            50% { top: 86%; opacity: 1; }
+            100% { top: 12%; opacity: 0.85; }
+        }
+        .scanner-laser-line {
+            position: absolute;
+            left: 3%;
+            right: 3%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #10b981 20%, #34d399 50%, #10b981 80%, transparent);
+            box-shadow: 0 0 14px #10b981, 0 0 4px #a7f3d0;
+            animation: laserSweep 2s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        /* Success Hit Flash */
+        .reticle-hit {
+            border-color: #34c759 !important;
+            background-color: rgba(52, 199, 89, 0.25) !important;
+            box-shadow: 0 0 25px rgba(52, 199, 89, 0.9), 0 0 0 9999px rgba(0, 0, 0, 0.5) !important;
+            transform: scale(1.02);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+    </style>
+</head>
+<body class="h-full bg-black text-white flex flex-col font-sans overflow-hidden">
+
+    <!-- Top Navigation Header (Apple Style) -->
+    <header class="w-full px-4 py-3 bg-black/90 backdrop-blur-md border-b border-neutral-900 flex items-center justify-between z-30 shrink-0">
+        <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-md">
+                <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+                    <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+                    <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+                    <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                    <line x1="7" y1="12" x2="17" y2="12"/>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-base font-bold tracking-tight text-white leading-none">WKT S/N Scanner</h1>
+                <p id="api-status-badge" class="text-[10px] text-neutral-400 font-medium flex items-center gap-1 mt-0.5 cursor-pointer" onclick="switchMainTab('settings')">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="text-emerald-400">เชื่อมต่อระบบแล้ว (พร้อมสแกน)</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Right Quick Actions -->
+        <div class="flex items-center gap-2">
+            <!-- Install PWA prompt button (shown if available) -->
+            <button type="button" id="btn-install-pwa" onclick="promptInstallPwa()" class="hidden px-2.5 py-1 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1 transition-all shadow-sm">
+                <span>📲</span> <span>ติดตั้งแอพ</span>
+            </button>
+            <!-- Reload Data -->
+            <button type="button" onclick="syncAllSheetData(true)" class="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 flex items-center justify-center text-sm transition-all cursor-pointer" title="รีเฟรชข้อมูลชีต">
+                🔄
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 w-full max-w-lg mx-auto flex flex-col overflow-y-auto relative custom-scroll">
+
+        <!-- ========================================== -->
+        <!-- VIEW 1: สแกนเนอร์กล้องสด สไตล์ Apple iOS    -->
+        <!-- ========================================== -->
+        <section id="tab-scanner" class="flex-1 flex flex-col p-4">
+            
+            <!-- Scanner Mode: CAMERA -->
+            <div id="scanner-view-camera" class="flex flex-col flex-1">
+                <!-- Camera Submode Switcher: Single vs Continuous Gun -->
+                <div class="flex bg-neutral-900 p-1 rounded-2xl border border-neutral-800 text-xs font-bold mb-3 select-none">
+                    <button type="button" id="cam-sub-single" onclick="switchCameraScanMode('single')" class="flex-1 py-1.5 rounded-xl bg-blue-600 text-white transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm">
+                        <span>🎯</span> <span>ทีละเครื่อง (Single)</span>
+                    </button>
+                    <button type="button" id="cam-sub-gun" onclick="switchCameraScanMode('continuous')" class="flex-1 py-1.5 rounded-xl text-neutral-400 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                        <span>⚡</span> <span>ปืนยิงต่อเนื่อง (Continuous Gun)</span>
+                    </button>
+                </div>
+
+                <!-- Upper Half: Viewfinder with Apple-style rounded reticle -->
+                <div id="scanner-viewfinder-box" class="w-full bg-neutral-950 rounded-3xl overflow-hidden relative aspect-[4/3] flex flex-col justify-center items-center shadow-2xl border border-neutral-800 select-none transition-all">
+                    <!-- Live Camera Video -->
+                    <video id="scanner-video" playsinline webkit-playsinline autoplay muted class="w-full h-full object-cover transition-transform duration-200"></video>
+
+                    <!-- Scanning Reticle Frame (ขอบมนตัดฉากหลังโปร่งแสงสไตล์ Apple Support) -->
+                    <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <div id="scanner-reticle" class="w-[88%] h-[30%] rounded-2xl border-2 border-white/85 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] relative transition-all duration-200 flex items-center justify-center">
+                            <div id="scanner-laser" class="scanner-laser-line"></div>
+                            
+                            <!-- Continuous Mode Badge Indicator -->
+                            <div id="reticle-mode-badge" class="hidden absolute -top-8 px-2.5 py-0.5 rounded-full bg-blue-600/90 backdrop-blur-md text-white font-mono text-[10px] font-bold shadow-lg border border-blue-400/40 flex items-center gap-1">
+                                <span class="animate-pulse">⚡</span> <span>ปืนยิงบาร์โค้ดต่อเนื่อง</span>
+                            </div>
+
+                            <!-- Apple-style Live OCR Floating Pill -->
+                            <div id="reticle-ocr-pill" class="absolute -bottom-10 px-3.5 py-1 rounded-full bg-emerald-600/90 backdrop-blur-md text-white font-mono text-xs font-bold shadow-xl opacity-0 transition-all duration-200 pointer-events-none flex items-center gap-1.5 border border-emerald-400/40">
+                                <span class="animate-pulse">🟢</span> <span id="reticle-ocr-text">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Top-Right Torch Button -->
+                    <button type="button" id="btn-torch" onclick="toggleTorch()" class="absolute top-3 right-3 z-30 w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer" title="เปิด/ปิดไฟฉาย">
+                        <span id="torch-icon" class="text-sm">🔦</span>
+                    </button>
+
+                    <!-- Top-Left Camera Flip -->
+                    <button type="button" onclick="switchCameraFacing()" class="absolute top-3 left-3 z-30 w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer" title="สลับกล้อง">
+                        <span class="text-sm">🔄</span>
+                    </button>
+
+                    <!-- Bottom Zoom Controls & Snapshot -->
+                    <div class="absolute bottom-3 inset-x-3 z-30 flex items-center justify-between pointer-events-auto">
+                        <!-- Zoom 1X, 2X, 3X -->
+                        <div class="flex items-center gap-1 bg-black/60 backdrop-blur-md px-2 py-1 rounded-full border border-white/15">
+                            <button type="button" id="btn-zoom-1" onclick="setZoomLevel(1)" class="w-6 h-6 rounded-full text-[11px] font-bold bg-emerald-500 text-white">1X</button>
+                            <button type="button" id="btn-zoom-2" onclick="setZoomLevel(2)" class="w-6 h-6 rounded-full text-[11px] font-bold bg-white/20 text-white">2X</button>
+                            <button type="button" id="btn-zoom-3" onclick="setZoomLevel(3)" class="w-6 h-6 rounded-full text-[11px] font-bold bg-white/20 text-white">3X</button>
+                        </div>
+
+                        <!-- Quick Native Photo Capture -->
+                        <button type="button" onclick="triggerNativeCapture()" class="px-3.5 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 backdrop-blur-md text-white text-xs font-bold flex items-center gap-1.5 shadow-lg active:scale-95 cursor-pointer transition-all">
+                            <span>📸</span> <span>ถ่ายภาพ</span>
+                        </button>
+                    </div>
+
+                    <!-- Hidden Inputs for Photo Capture / Library Pick -->
+                    <input type="file" id="scanner-file-input" accept="image/*" capture="environment" class="hidden" onchange="handleFileSelected(event)">
+                    <input type="file" id="scanner-gallery-input" accept="image/*" class="hidden" onchange="handleFileSelected(event)">
+
+                    <!-- Loading / Permission Error Overlay -->
+                    <div id="scanner-status-overlay" class="absolute inset-0 bg-black/95 z-40 hidden flex flex-col justify-center items-center p-6 text-center"></div>
+                </div>
+
+                <!-- Lower Section A: Single Mode (Original Apple Typography & Navigation) -->
+                <div id="scanner-lower-single" class="pt-5 pb-2 flex flex-col justify-between flex-1">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white tracking-tight">
+                            สแกนหมายเลขประจำเครื่อง
+                        </h2>
+                        <p class="text-xs text-neutral-400 mt-2 leading-relaxed">
+                            ค้นหาหมายเลขประจำเครื่อง (S/N) หรือบาร์โค้ดบนผลิตภัณฑ์ หน้าจอ หรือบรรจุภัณฑ์ จัดตำแหน่งให้อยู่ในกรอบ
+                        </p>
+                    </div>
+
+                    <div class="pt-6 flex flex-col gap-3">
+                        <!-- Direct link to Manual Entry (Apple Style) -->
+                        <div class="text-xs text-neutral-400">
+                            มีปัญหาการสแกนใช่ไหม 
+                            <button type="button" onclick="switchScannerMode('manual')" class="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer underline-offset-2 hover:underline ml-1">
+                                ป้อนหมายเลขประจำเครื่องด้วยตนเอง
+                            </button>
+                        </div>
+
+                        <!-- Gallery Picker Button -->
+                        <button type="button" onclick="triggerGalleryPick()" class="w-full py-2.5 px-4 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 rounded-2xl text-xs font-semibold text-neutral-300 flex items-center justify-center gap-2 cursor-pointer transition-all">
+                            <span>🖼️</span> <span>เลือกภาพถ่ายบาร์โค้ดจากคลังภาพ</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Lower Section B: Continuous Gun Mode (Live Feed & Summary Bar เหมือนรูปที่ 2) -->
+                <div id="scanner-lower-gun" class="hidden pt-3 flex flex-col gap-2.5 flex-1 min-h-0">
+                    <!-- Live Statistics Bar (รูปที่ 2) -->
+                    <div class="flex flex-wrap items-center justify-between bg-neutral-900/90 border border-neutral-800 px-3 py-2 rounded-2xl text-xs gap-1.5 shadow-sm">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-neutral-300 font-bold">ยิงแล้ว:</span>
+                            <span id="cam-gun-count" class="font-mono font-black text-emerald-400 bg-neutral-950 px-2 py-0.5 rounded-lg border border-neutral-800 text-xs">0</span>
+                            <span class="text-neutral-400 text-[11px]">เครื่อง</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-[11px] font-bold">
+                            <span class="text-emerald-400" title="ติดเช่า/พร้อมคืน">🟢 ติดเช่า <span id="cam-gun-rent-count">0</span></span>
+                            <span class="text-neutral-400" title="ว่างในสต็อก">⚪ ในสต็อก <span id="cam-gun-stock-count">0</span></span>
+                            <span class="text-rose-400" title="ไม่พบในระบบ">🔴 ไม่พบ <span id="cam-gun-notfound-count">0</span></span>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="addContinuousGunToBatch()" class="flex-1 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                            <span>➕</span> <span>นำเข้าชุดสะสม (<span id="cam-gun-btn-count">0</span> เครื่อง)</span>
+                        </button>
+                        <button type="button" onclick="clearContinuousGunList()" class="px-3 py-2.5 bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-300 rounded-xl text-xs font-semibold cursor-pointer">
+                            ล้าง
+                        </button>
+                        <button type="button" onclick="transferContinuousToManualTextarea()" class="px-3 py-2.5 bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-300 rounded-xl text-xs font-semibold cursor-pointer" title="ย้ายข้อมูลไปดูในช่องพิมพ์">
+                            📝 ช่องพิมพ์
+                        </button>
+                    </div>
+
+                    <!-- Live Scanned Cards Feed (รายการ S/N & สัญญาเดิม เหมือนรูปที่ 2) -->
+                    <div class="flex-1 flex flex-col min-h-0">
+                        <div class="flex justify-between items-center text-xs font-bold text-neutral-300 mb-1.5">
+                            <span class="flex items-center gap-1">
+                                <span>🔍</span> <span>รายการ S/N ที่สแกน & ข้อมูลสัญญาเดิม:</span>
+                            </span>
+                            <span id="cam-gun-loading-badge" class="hidden text-[10px] text-amber-400 font-mono items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> เช็คข้อมูล...
+                            </span>
+                        </div>
+                        <div id="cam-gun-feed-list" class="flex-1 overflow-y-auto space-y-2 pr-0.5 custom-scroll max-h-52">
+                            <div id="cam-gun-empty-state" class="p-4 rounded-2xl bg-neutral-900/50 border border-neutral-800/60 text-center text-neutral-500 text-xs">
+                                🔫 ส่องกล้องไปที่บาร์โค้ดเพื่อยิงได้รัวๆ รายการจะไหลขึ้นมาที่นี่ทันที
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scanner Mode: MANUAL ENTRY (Apple Support Style) -->
+            <div id="scanner-view-manual" class="flex flex-col flex-1 hidden">
+                <!-- Top Nav Bar: Back | Title | Next -->
+                <div class="w-full py-2 flex justify-between items-center border-b border-neutral-900 pb-3">
+                    <button type="button" onclick="switchScannerMode('camera')" class="w-9 h-9 rounded-full bg-neutral-800 hover:bg-neutral-700 text-white flex items-center justify-center text-sm font-bold cursor-pointer transition-all">
+                        ❮
+                    </button>
+                    <h3 class="text-base font-bold text-white">ป้อนหมายเลขประจำเครื่อง</h3>
+                    <button type="button" id="btn-manual-next" onclick="submitManualSerial()" class="px-3.5 py-1.5 rounded-full bg-blue-600 opacity-40 text-white text-xs font-bold transition-all cursor-not-allowed" disabled>
+                        ถัดไป
+                    </button>
+                </div>
+
+                <!-- Input Body -->
+                <div class="pt-4 flex flex-col gap-4 flex-1">
+                    <!-- Submode Switcher: Single vs Bulk Gun -->
+                    <div class="flex bg-neutral-900 p-1 rounded-2xl border border-neutral-800 text-xs font-bold">
+                        <button type="button" id="tab-sub-single" onclick="switchManualSubmode('single')" class="flex-1 py-1.5 rounded-xl bg-blue-600 text-white transition-all cursor-pointer">
+                            🎯 ยิงทีละเครื่อง
+                        </button>
+                        <button type="button" id="tab-sub-bulk" onclick="switchManualSubmode('bulk')" class="flex-1 py-1.5 rounded-xl text-neutral-400 hover:text-white transition-all cursor-pointer">
+                            ⚡ ยิงรัวเป็นชุด (Bulk Gun)
+                        </button>
+                    </div>
+
+                    <!-- Single Mode Box -->
+                    <div id="box-sub-single" class="flex flex-col gap-4">
+                        <!-- Live OCR Alert Badge -->
+                        <div id="manual-ocr-detected-alert" class="hidden p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300">
+                            <span class="flex items-center gap-1.5 font-semibold">✨ ตรวจพบจากกล้องอัตโนมัติ (Live Text)</span>
+                            <span id="manual-ocr-countdown" class="text-[11px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/30">กำลังเปิด...</span>
+                        </div>
+
+                        <div class="flex flex-col gap-2">
+                            <label class="text-xs font-medium text-neutral-400">หมายเลขประจำเครื่อง (Serial Number / S/N)</label>
+                            <div class="relative w-full">
+                                <input type="text" id="manual-sn-input" placeholder="ป้อนหมายเลขประจำเครื่อง เช่น 5CD238M2D5" class="w-full bg-[#1c1c1e] border border-neutral-700 rounded-2xl px-4 py-3.5 text-white font-mono uppercase text-base placeholder-neutral-500 focus:outline-none focus:border-blue-500 pr-10 transition-colors" oninput="handleManualInputChange()" onkeydown="if(event.key==='Enter'){event.preventDefault();submitManualSerial();}">
+                                <button type="button" onclick="clearManualInput()" class="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-neutral-700 hover:bg-neutral-600 text-neutral-300 flex items-center justify-center text-xs cursor-pointer">✕</button>
+                            </div>
+                            <p class="text-[11px] text-neutral-500 mt-0.5">
+                                ค้นหาหมายเลขประจำเครื่องบนผลิตภัณฑ์ บาร์โค้ด หรือกล่องบรรจุภัณฑ์
+                            </p>
+                        </div>
+
+                        <!-- Common Examples / Recent Scans -->
+                        <div id="recent-scans-quick" class="mt-2 pt-3 border-t border-neutral-900">
+                            <div class="text-xs text-neutral-400 mb-2 font-medium">รายการที่ยิงล่าสุด:</div>
+                            <div id="recent-scans-list" class="flex flex-wrap gap-1.5">
+                                <span class="text-neutral-600 text-xs italic">ยังไม่มีประวัติการค้นหา</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bulk Gun Mode Box -->
+                    <div id="box-sub-bulk" class="hidden flex-col gap-3">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-neutral-300 font-bold">🔫 ยิงด้วยปืนบาร์โค้ดต่อเนื่อง (1 บรรทัดต่อ 1 เครื่อง):</span>
+                            <button type="button" onclick="openCameraContinuousGun()" class="px-2.5 py-1 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer">
+                                <span>📷</span> <span>เปิดกล้องยิงรัว</span>
+                            </button>
+                        </div>
+                        <div class="relative w-full">
+                            <textarea id="bulk-manual-textarea" rows="4" class="w-full bg-[#1c1c1e] border-2 border-neutral-700 focus:border-blue-500 rounded-2xl p-3.5 text-emerald-400 font-mono text-sm leading-relaxed outline-none transition-colors resize-y placeholder-neutral-600" placeholder="ใช้เครื่องสแกนบาร์โค้ดยิงใส่ช่องนี้ได้รัวๆ...&#10;5CD112GPNW&#10;5CD112GPNX&#10;PF4ND7EL" oninput="handleBulkManualInput()"></textarea>
+                        </div>
+
+                        <!-- Live Summary Bar (สไตล์รูปที่ 2) -->
+                        <div id="bulk-summary-bar" class="hidden flex flex-wrap items-center justify-between bg-neutral-900 border border-neutral-800 p-2.5 rounded-xl text-xs gap-1.5 shadow-sm">
+                            <div class="text-neutral-300 font-bold">
+                                จำนวน S/N ที่ยิง: <span id="bulk-stat-total" class="font-mono text-white font-bold">0</span> รายการ
+                            </div>
+                            <div class="flex items-center gap-2 text-[11px] font-bold">
+                                <span class="text-emerald-400">🟢 ติดเช่า/พร้อมคืน <span id="bulk-stat-rent">0</span></span>
+                                <span class="text-neutral-400">⚪ ในสต็อก <span id="bulk-stat-stock">0</span></span>
+                                <span class="text-rose-400">🔴 ไม่พบ <span id="bulk-stat-notfound">0</span></span>
+                                <span id="bulk-stat-dup-wrapper" class="hidden text-amber-400">⚠️ ซ้ำ <span id="bulk-stat-dup">0</span></span>
+                            </div>
+                        </div>
+
+                        <!-- Live Scanned Cards Container (สไตล์รูปที่ 2) -->
+                        <div id="bulk-live-preview-box" class="hidden flex flex-col gap-2">
+                            <div class="flex justify-between items-center text-xs font-bold text-neutral-300">
+                                <span>🔍 รายการ S/N ที่สแกน & ข้อมูลสัญญาเดิม:</span>
+                                <span id="bulk-preview-loading" class="hidden text-[10px] text-amber-400 font-mono flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> กำลังดึงข้อมูล...
+                                </span>
+                            </div>
+                            <div id="bulk-live-cards-list" class="max-h-64 overflow-y-auto space-y-2 pr-1 custom-scroll">
+                                <!-- Cards populated here -->
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 pt-1">
+                            <button type="button" onclick="addBulkManualToBatch()" class="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                                <span>➕</span> <span>นำเข้าชุดสะสม (<span id="bulk-btn-count">0</span> เครื่อง)</span>
+                            </button>
+                            <button type="button" onclick="clearBulkManualTextarea()" class="px-3.5 py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white rounded-xl text-xs font-semibold cursor-pointer">
+                                ล้าง
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 2: แผ่นแสดงผลข้อมูลเครื่อง (Result Sheet) -->
+        <!-- ========================================== -->
+        <section id="tab-result" class="flex-1 flex flex-col p-4 hidden">
+            <!-- Back to Scanner Button -->
+            <div class="flex items-center justify-between pb-3 border-b border-neutral-900">
+                <button type="button" onclick="switchMainTab('scanner')" class="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 text-sm font-semibold cursor-pointer">
+                    <span>❮</span> <span>สแกนเครื่องถัดไป</span>
+                </button>
+                <span id="result-source-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-800 text-neutral-300 border border-neutral-700">Stock Rent</span>
+            </div>
+
+            <!-- Result Card (Apple Device Inspector Style) -->
+            <div id="asset-card" class="mt-4 flex flex-col gap-4">
+                
+                <!-- Main Header Card -->
+                <div class="bg-[#1c1c1e] rounded-3xl p-5 border border-neutral-800 shadow-xl flex flex-col gap-3">
+                    <div class="flex justify-between items-start">
+                        <div class="flex flex-col">
+                            <span id="card-brand" class="text-xs font-bold uppercase tracking-wider text-blue-400">NOTEBOOK</span>
+                            <h3 id="card-model" class="text-xl font-black text-white tracking-tight mt-0.5">HP ProBook 440 G8</h3>
+                        </div>
+                        <span id="card-status-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            กำลังใช้งาน
+                        </span>
+                    </div>
+
+                    <!-- S/N Box with Copy -->
+                    <div class="bg-black/60 rounded-2xl p-3 border border-neutral-800/80 flex items-center justify-between">
+                        <div>
+                            <div class="text-[10px] text-neutral-400 font-medium">SERIAL NUMBER (S/N)</div>
+                            <div id="card-sn" class="text-base font-mono font-black text-emerald-300 tracking-wider">5CD238M2D5</div>
+                        </div>
+                        <button type="button" onclick="copyCardSn()" class="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-xs text-white font-medium flex items-center gap-1 transition-all cursor-pointer">
+                            <span id="copy-btn-text">คัดลอก</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Detail Metadata Rows -->
+                <div class="bg-[#1c1c1e] rounded-3xl p-4 border border-neutral-800 divide-y divide-neutral-800/80 text-xs">
+                    
+                    <!-- Company / Customer -->
+                    <div class="py-2.5 flex justify-between items-center">
+                        <span class="text-neutral-400">บริษัท / ลูกค้า</span>
+                        <span id="card-comp" class="font-semibold text-white text-right max-w-[65%] truncate">-</span>
+                    </div>
+
+                    <!-- Client Asset Tag (e.g. NB707) -->
+                    <div class="py-2.5 flex justify-between items-center">
+                        <span class="text-neutral-400">รหัสทรัพย์สินลูกค้า (Asset Tag)</span>
+                        <span id="card-tag" class="font-mono font-bold text-amber-300">-</span>
+                    </div>
+
+                    <!-- Rental / Warranty Period -->
+                    <div class="py-2.5 flex justify-between items-center">
+                        <span class="text-neutral-400">ระยะเวลาสัญญา</span>
+                        <div class="text-right">
+                            <div id="card-period" class="font-semibold text-white">01/01/2026 - 31/12/2026</div>
+                            <div id="card-days-left" class="text-[10px] text-emerald-400 font-bold mt-0.5">เหลืออีก 180 วัน</div>
+                        </div>
+                    </div>
+
+                    <!-- Quotation No -->
+                    <div class="py-2.5 flex justify-between items-center">
+                        <span class="text-neutral-400">ใบเสนอราคา (Quotation)</span>
+                        <span id="card-quote" class="font-mono font-bold text-blue-400">-</span>
+                    </div>
+
+                    <!-- Specs -->
+                    <div class="py-2.5 flex flex-col gap-1">
+                        <span class="text-neutral-400">สเปก / อุปกรณ์เสริม</span>
+                        <span id="card-spec" class="text-neutral-200 leading-relaxed font-sans bg-black/40 p-2.5 rounded-xl border border-neutral-800/60">-</span>
+                    </div>
+
+                    <!-- Remark / Note -->
+                    <div class="py-2.5 flex flex-col gap-1">
+                        <span class="text-neutral-400">หมายเหตุ</span>
+                        <span id="card-remark" class="text-neutral-300 leading-relaxed font-sans bg-black/40 p-2.5 rounded-xl border border-neutral-800/60">-</span>
+                    </div>
+                </div>
+
+                <!-- 🎯 Quotation Progress & Missing Counter (ติดตามจำนวนในโครงการ / ขาดกี่ตัว) -->
+                <div id="card-quotation-progress-box" class="hidden bg-[#1c1c1e] rounded-3xl p-4 border border-indigo-500/30 space-y-3">
+                    <div class="flex justify-between items-center pb-2 border-b border-neutral-800">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">📊</span>
+                            <div>
+                                <div class="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
+                                    <span>โครงการ Quotation:</span>
+                                    <span id="card-q-name" class="text-blue-400 font-mono font-bold">-</span>
+                                </div>
+                                <div class="text-[10px] text-neutral-400">ติดตามยอดเครื่องในสัญญาเดียวกัน</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span id="card-q-progress-badge" class="px-2.5 py-1 rounded-full text-xs font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                                0 / 0
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Progress bar -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-[11px]">
+                            <span class="text-neutral-300">สแกนไปแล้ว: <b id="card-q-scanned-count" class="text-emerald-400 font-bold">0</b> / <span id="card-q-total-count" class="text-white font-bold">0</span> เครื่อง</span>
+                            <span id="card-q-missing-text" class="text-amber-400 font-bold">ขาดอีก 0 เครื่อง</span>
+                        </div>
+                        <div class="w-full bg-neutral-900 h-2.5 rounded-full overflow-hidden border border-neutral-800">
+                            <div id="card-q-progress-bar" class="bg-gradient-to-r from-blue-500 to-emerald-500 h-full w-0 transition-all duration-300"></div>
+                        </div>
+                    </div>
+
+                    <!-- Missing S/N List -->
+                    <div id="card-q-missing-box" class="space-y-1.5 pt-1">
+                        <div class="text-[11px] font-bold text-neutral-300 flex items-center justify-between">
+                            <span>📋 S/N ใน Q. นี้ที่ยังขาด (ต้องตามเก็บ):</span>
+                            <span id="card-q-missing-tag" class="text-[10px] text-rose-400 font-bold">0 เครื่อง</span>
+                        </div>
+                        <div id="card-q-missing-chips" class="max-h-28 overflow-y-auto bg-black/50 p-2 rounded-xl border border-neutral-800/80 flex flex-wrap gap-1 custom-scroll font-mono text-[11px]">
+                            <!-- Missing S/N chips populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex items-center gap-2 pt-2">
+                    <button type="button" onclick="switchMainTab('scanner')" class="flex-1 py-3.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-2xl text-xs font-bold transition-all shadow-lg flex items-center justify-center gap-1.5 cursor-pointer">
+                        <span>📸</span> <span>สแกนเครื่องถัดไป</span>
+                    </button>
+                    <button type="button" onclick="addToBatchList()" class="py-3.5 px-4 bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-white rounded-2xl text-xs font-semibold transition-all border border-neutral-700 flex items-center justify-center gap-1.5 cursor-pointer" title="เพิ่มลงถาดสะสมหลายเครื่อง">
+                        <span>➕</span> <span>เพิ่มเข้าชุด</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 3: โหมดสแกนสะสมหลายเครื่อง (Batch Mode) -->
+        <!-- ========================================== -->
+        <section id="tab-batch" class="flex-1 flex flex-col p-4 hidden">
+            <div class="flex justify-between items-center pb-3 border-b border-neutral-900">
+                <div>
+                    <h3 class="text-base font-bold text-white">ถาดสแกนสะสม (Multi-Scan)</h3>
+                    <p class="text-[11px] text-neutral-400">เดินยิงเครื่องเป็นชุดแล้วกดยืนยันรอบเดียว</p>
+                </div>
+                <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-600/20 text-blue-400 border border-blue-500/30">
+                    <span id="batch-count">0</span> เครื่อง
+                </span>
+            </div>
+
+            <div id="batch-list" class="flex-1 overflow-y-auto space-y-2 py-4 custom-scroll">
+                <!-- Batch items populated here -->
+                <div class="h-48 flex flex-col items-center justify-center text-neutral-500 text-xs gap-2">
+                    <span class="text-3xl">📦</span>
+                    <span>ยังไม่มีรายการในชุดนี้ สแกนแล้วกด "เพิ่มเข้าชุด"</span>
+                </div>
+            </div>
+
+            <!-- Batch Action Buttons -->
+            <div class="pt-3 border-t border-neutral-900 space-y-2">
+                <!-- Primary Send to Admin Button -->
+                <button type="button" onclick="openSubmitPendingModal()" class="w-full py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 active:scale-98 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center justify-center gap-2">
+                    <span class="text-base">📤</span> <span>ส่งให้ Admin ตรวจสอบ & อนุมัติเข้าเว็บ</span>
+                </button>
+
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="copyAllBatchSns()" class="flex-1 py-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                        <span>📋</span> <span>คัดลอก S/N</span>
+                    </button>
+                    <button type="button" onclick="clearBatchList()" class="py-3 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 rounded-2xl text-xs font-semibold transition-all cursor-pointer">
+                        ล้างถาด
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Modal: ส่งรายการให้ Admin ตรวจสอบ -->
+        <div id="modal-submit-pending" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all">
+            <div class="bg-neutral-900 border border-neutral-800 w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto custom-scroll shadow-2xl">
+                <div class="flex justify-between items-center pb-3 border-b border-neutral-800">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">📤</span>
+                        <div>
+                            <h3 class="text-base font-bold text-white">ส่งให้ Admin ตรวจสอบ</h3>
+                            <p class="text-[11px] text-neutral-400">ส่งรายการ S/N เข้าคิวรอ Admin อนุมัติบนหน้าเว็บ</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="closeSubmitPendingModal()" class="text-neutral-400 hover:text-white text-xl p-1 font-bold">&times;</button>
+                </div>
+
+                <!-- Sender Name -->
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-neutral-300">👤 ชื่อผู้ส่ง / สตาฟฟ์ <span class="text-rose-400">*</span></label>
+                    <input type="text" id="pending-sender-name" placeholder="ระบุชื่อของคุณ (เช่น สมชาย, ช่างเอ)" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                </div>
+
+                <!-- Batch Type -->
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-neutral-300">📦 ประเภทรายการ <span class="text-rose-400">*</span></label>
+                    <select id="pending-batch-type" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                        <option value="รับเข้าสต็อกใหม่">📦 รับสินค้าเข้าใหม่ (Stock New)</option>
+                        <option value="รับคืนสินค้าเข้าสต็อก">🔄 รับคืนจากลูกค้า / คืนสต็อก (Stock Rent)</option>
+                        <option value="ตัดขาย">🏷️ ตัดขาย (Sell)</option>
+                        <option value="ตรวจเช็ค / ส่งซ่อม">🛠️ ตรวจเช็ค / ส่งซ่อม (Repair)</option>
+                    </select>
+                </div>
+
+                <!-- Target Stock -->
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-neutral-300">🏢 สต็อกเป้าหมาย</label>
+                    <select id="pending-target-stock" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                        <option value="Stock Rent">Stock Rent (สต็อกหมุนเวียน/เช่า)</option>
+                        <option value="Stock Used">Stock Used (ขายมือสอง)</option>
+                        <option value="Stock New">Stock New (สินค้าใหม่)</option>
+                        <option value="Sell">Sell (ตัดขาย)</option>
+                        <option value="Repair">Repair (ซ่อม)</option>
+                    </select>
+                </div>
+
+                <!-- Model info -->
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-neutral-300">💻 รุ่น / Model (ถ้ามี)</label>
+                    <input type="text" id="pending-model-name" placeholder="เช่น HP ProBook 440 G8, Dell Latitude 5420" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                </div>
+
+                <!-- Remark -->
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-neutral-300">📝 หมายเหตุเพิ่มเติม</label>
+                    <input type="text" id="pending-remark" placeholder="เช่น รับจากบริษัท Eventthai, คืนงานบูธ" class="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
+                </div>
+
+                <!-- Preview S/N List -->
+                <div class="space-y-1">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-neutral-300">📋 รายการ S/N ที่จะส่ง:</span>
+                        <span class="text-emerald-400 font-bold" id="pending-modal-count">0 เครื่อง</span>
+                    </div>
+                    <div id="pending-modal-sn-chips" class="max-h-28 overflow-y-auto bg-neutral-950/80 p-2.5 rounded-xl border border-neutral-800 flex flex-wrap gap-1.5 custom-scroll font-mono text-[11px]"></div>
+                </div>
+
+                <!-- Submit button -->
+                <div class="pt-2 space-y-2">
+                    <button type="button" id="btn-confirm-submit-pending" onclick="confirmSubmitBatchToAdmin()" class="w-full py-3 bg-blue-600 hover:bg-blue-500 active:scale-98 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30">
+                        <span>🚀</span> <span>ยืนยันส่งข้อมูลให้ Admin</span>
+                    </button>
+                    <button type="button" onclick="closeSubmitPendingModal()" class="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl text-xs font-semibold transition-all cursor-pointer">
+                        ยกเลิก
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- VIEW 4: ตั้งค่า & ติดตั้ง PWA (Settings)   -->
+        <!-- ========================================== -->
+        <section id="tab-settings" class="flex-1 flex flex-col p-4 hidden">
+            <h3 class="text-base font-bold text-white pb-3 border-b border-neutral-900">การตั้งค่าและการเชื่อมต่อ</h3>
+
+            <div class="mt-4 space-y-4">
+                <!-- API URL Input -->
+                <div class="bg-[#1c1c1e] p-4 rounded-3xl border border-neutral-800 space-y-2">
+                    <label class="text-xs font-bold text-neutral-300">Google Apps Script Web App URL (API)</label>
+                    <input type="url" id="setting-api-url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-black/60 border border-neutral-700 rounded-xl px-3 py-2.5 text-xs text-white font-mono placeholder-neutral-500 focus:outline-none focus:border-blue-500">
+                    <p class="text-[10px] text-neutral-400">
+                        ใส่ URL ที่ได้จากการกด "ทำให้ใช้งานได้ (Deploy)" ใน Google Apps Script
+                    </p>
+                    <button type="button" onclick="saveApiUrlSetting()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all">
+                        บันทึกการตั้งค่า
+                    </button>
+                </div>
+
+                <!-- Offline Cache Status -->
+                <div class="bg-[#1c1c1e] p-4 rounded-3xl border border-neutral-800 flex justify-between items-center">
+                    <div>
+                        <div class="text-xs font-bold text-white">ข้อมูลแคชออฟไลน์ (IndexedDB)</div>
+                        <div id="cache-status-text" class="text-[11px] text-neutral-400 mt-0.5">พร้อมใช้งานออฟไลน์</div>
+                    </div>
+                    <button type="button" onclick="syncAllSheetData(true)" class="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl text-xs font-semibold cursor-pointer">
+                        ซิงค์ทันที
+                    </button>
+                </div>
+
+                <!-- How to Add to Home Screen (iPhone / iPad Guide) -->
+                <div class="bg-[#1c1c1e] p-4 rounded-3xl border border-neutral-800 space-y-2 text-xs text-neutral-300">
+                    <div class="font-bold text-white flex items-center gap-1.5">
+                        <span>📲</span> <span>วิธีติดตั้งลงหน้าจอโฮม (iPhone / iPad):</span>
+                    </div>
+                    <ol class="list-decimal pl-5 space-y-1 text-neutral-400 text-[11px] leading-relaxed">
+                        <li>เปิดหน้านี้ด้วย <b>Safari</b> บน iPhone</li>
+                        <li>แตะปุ่ม <b>แชร์ (Share)</b> <span class="text-blue-400 font-bold">⎋</span> ที่แถบล่างสุด</li>
+                        <li>เลื่อนลงแล้วแตะ <b>"เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)"</b></li>
+                        <li>จะได้ไอคอนแอพ <b>WKT Scan</b> ใช้งานได้เต็มหน้าจอเหมือนแอพแท้</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar (Apple Tab Bar Style) -->
+    <nav class="w-full bg-black/90 backdrop-blur-md border-t border-neutral-900 px-4 py-2 flex items-center justify-around z-30 shrink-0 select-none">
+        <!-- Tab 1: Scanner -->
+        <button type="button" onclick="switchMainTab('scanner')" id="nav-btn-scanner" class="flex flex-col items-center gap-1 text-blue-400 cursor-pointer transition-colors">
+            <span class="text-lg">📷</span>
+            <span class="text-[10px] font-semibold">สแกน</span>
+        </button>
+
+        <!-- Tab 2: Result Sheet -->
+        <button type="button" onclick="switchMainTab('result')" id="nav-btn-result" class="flex flex-col items-center gap-1 text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors">
+            <span class="text-lg">🔍</span>
+            <span class="text-[10px] font-semibold">ผลค้นหา</span>
+        </button>
+
+        <!-- Tab 3: Batch Mode -->
+        <button type="button" onclick="switchMainTab('batch')" id="nav-btn-batch" class="flex flex-col items-center gap-1 text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors relative">
+            <span class="text-lg">📦</span>
+            <span class="text-[10px] font-semibold">ชุดสะสม</span>
+            <span id="nav-batch-badge" class="hidden absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-600 text-white text-[9px] font-bold flex items-center justify-center">0</span>
+        </button>
+
+        <!-- Tab 4: Settings -->
+        <button type="button" onclick="switchMainTab('settings')" id="nav-btn-settings" class="flex flex-col items-center gap-1 text-neutral-500 hover:text-neutral-300 cursor-pointer transition-colors">
+            <span class="text-lg">⚙️</span>
+            <span class="text-[10px] font-semibold">ตั้งค่า</span>
+        </button>
+    </nav>
+
+    <!-- Application Script -->
+    <script src="app.js?v=1.0.5"></script>
+</body>
+</html>
