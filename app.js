@@ -298,6 +298,15 @@ async function startLiveCamera() {
             audio: false,
             video: {
                 facingMode: { ideal: scannerFacingMode },
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 },
+                focusMode: { ideal: 'continuous' }
+            }
+        },
+        {
+            audio: false,
+            video: {
+                facingMode: { ideal: scannerFacingMode },
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
             }
@@ -538,9 +547,23 @@ async function initBarcodeEngines() {
 
     if (typeof ZXing !== 'undefined' && ZXing.BrowserMultiFormatReader) {
         try {
-            zxingReader = new ZXing.BrowserMultiFormatReader();
-            console.log('🏎️ ZXing fallback reader ready');
-        } catch(e) {}
+            const hints = new Map();
+            if (typeof ZXing.DecodeHintType !== 'undefined') {
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+                    ZXing.BarcodeFormat.DATA_MATRIX,
+                    ZXing.BarcodeFormat.QR_CODE,
+                    ZXing.BarcodeFormat.CODE_128,
+                    ZXing.BarcodeFormat.CODE_39,
+                    ZXing.BarcodeFormat.CODE_93,
+                    ZXing.BarcodeFormat.EAN_13
+                ]);
+            }
+            zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+            console.log('🏎️ ZXing fallback reader ready with Data Matrix & Try Harder');
+        } catch(e) {
+            try { zxingReader = new ZXing.BrowserMultiFormatReader(); } catch(e2) {}
+        }
     }
 
     // Initialize Tesseract OCR Engine for reading printed text / screen text
@@ -635,17 +658,44 @@ function getReticleCropRect(video, reticle) {
     const diffX = (rCenterX - vCenterX) / totalScale;
     const diffY = (rCenterY - vCenterY) / totalScale;
 
-    let cropX = Math.round((vw / 2) + diffX - (cropW / 2));
-    let cropY = Math.round((vh / 2) + diffY - (cropH / 2));
+    // เผื่อขอบ 6% ให้พื้นที่กรอบเล็งกว้างขึ้นเล็กน้อย ป้องกันตัวอักษรหรือบาร์โค้ดที่อยู่ชิดขอบถูกตัดแหว่ง
+    const padX = Math.round(cropW * 0.06);
+    const padY = Math.round(cropH * 0.06);
+
+    let cropX = Math.round((vw / 2) + diffX - (cropW / 2)) - padX;
+    let cropY = Math.round((vh / 2) + diffY - (cropH / 2)) - padY;
 
     // ตรวจสอบขอบเขตให้อยู่ในเนื้อวิดีโอเสมอ
     cropX = Math.max(0, Math.min(cropX, vw - 10));
     cropY = Math.max(0, Math.min(cropY, vh - 10));
-    const finalW = Math.max(10, Math.min(cropW, vw - cropX));
-    const finalH = Math.max(10, Math.min(cropH, vh - cropY));
+    const finalW = Math.max(10, Math.min(cropW + (padX * 2), vw - cropX));
+    const finalH = Math.max(10, Math.min(cropH + (padY * 2), vh - cropY));
 
     return { x: cropX, y: cropY, w: finalW, h: finalH };
 }
+
+let currentReticleShape = 'sticker'; // 'sticker' (48% height) | 'barcode' (28% height)
+
+window.toggleReticleShape = function() {
+    const reticle = document.getElementById('scanner-reticle');
+    const icon = document.getElementById('reticle-shape-icon');
+    const text = document.getElementById('reticle-shape-text');
+    if (!reticle) return;
+
+    if (currentReticleShape === 'sticker') {
+        currentReticleShape = 'barcode';
+        reticle.classList.remove('h-[48%]', 'h-[50%]');
+        reticle.classList.add('h-[28%]');
+        if (icon) icon.textContent = '📏';
+        if (text) text.textContent = 'แถบบาร์โค้ด';
+    } else {
+        currentReticleShape = 'sticker';
+        reticle.classList.remove('h-[28%]');
+        reticle.classList.add('h-[48%]');
+        if (icon) icon.textContent = '🔲';
+        if (text) text.textContent = 'สติกเกอร์';
+    }
+};
 
 function updateReticleCropCanvas(video, reticle) {
     const crop = getReticleCropRect(video, reticle);
@@ -665,8 +715,9 @@ function updateReticleCropCanvas(video, reticle) {
         reticleCropCanvas.height = targetH;
     }
 
-    // ⚡ ปิด imageSmoothing เพื่อให้เส้นบาร์โค้ดขาว-ดำ คมกริบ ไม่เบลอกลืนเป็นสีเทา
-    reticleCropCtx.imageSmoothingEnabled = false;
+    // ⚡ เปิด imageSmoothing แบบ high เพื่อให้มุมเหลี่ยมของตัวอักษร (เช่น Z, 2, B, 8) คมชัด ไม่แตกเป็นหยัก
+    reticleCropCtx.imageSmoothingEnabled = true;
+    reticleCropCtx.imageSmoothingQuality = 'high';
     reticleCropCtx.drawImage(video, crop.x, crop.y, crop.w, crop.h, 0, 0, targetW, targetH);
     return { crop, canvas: reticleCropCanvas, ctx: reticleCropCtx };
 }
@@ -737,12 +788,11 @@ async function runDetectionFrame() {
                     }
                 }
 
-                // 3. 🤖 Apple-Style Live Text OCR (เฉพาะ Single Mode และเมื่อไม่มีบาร์โค้ด)
-                // 🛑 ปิด OCR สนิทในโหมดปืนยิงต่อเนื่อง (Continuous Gun Mode) เพื่อป้องกันการอ่านตัวหนังสือเพี้ยนแทรกแซงบาร์โค้ด
-                if (cameraScanMode !== 'continuous' && !barcodeFound && ocrWorker && !isOcrBusy) {
+                // 3. 🤖 Apple-Style Live Text OCR (รองรับทั้ง Single Mode และ Continuous Gun Mode เมื่อไม่มีบาร์โค้ด)
+                if (!barcodeFound && ocrWorker && !isOcrBusy) {
                     const now = Date.now();
-                    // หน่วงเวลาให้กล้องโฟกัสบาร์โค้ดก่อนอย่างน้อย 1.5 วินาที
-                    if ((now - lastScannerStartTime > 1500) && (now - lastOcrTime > 800)) {
+                    // หน่วงเวลาให้กล้องเริ่มสตรีม 350ms และประมวลผล OCR ทุก 500ms เพื่อความลื่นไหล
+                    if ((now - lastScannerStartTime > 350) && (now - lastOcrTime > 500)) {
                         lastOcrTime = now;
                         runOcrOnVideoReticle(cropCanvas);
                     }
@@ -817,7 +867,7 @@ async function runOcrOnVideoReticle(cropCanvas) {
                     candidateOcrCount = 1;
                 }
 
-                if (isLabeled || candidateOcrCount >= 2) {
+                if (isLabeled || cameraScanMode === 'continuous' || candidateOcrCount >= 2) {
                     candidateOcrSn = null;
                     candidateOcrCount = 0;
                     console.log('🎉 Confirmed OCR Serial Number in reticle:', sn);
@@ -858,7 +908,6 @@ function disambiguateSerial(s) {
         for (let i = 3; i <= 5; i++) {
             if (chars[i] === 'O' || chars[i] === 'D' || chars[i] === 'Q') chars[i] = '0';
             if (chars[i] === 'I' || chars[i] === 'L' || chars[i] === 'T' || chars[i] === '|' || chars[i] === '!') chars[i] = '1';
-            if (chars[i] === 'Z') chars[i] = '2';
             if (chars[i] === 'S') chars[i] = '5';
             if (chars[i] === 'B') chars[i] = '8';
         }
@@ -909,44 +958,52 @@ function extractSerialFromOcrText(text) {
     const cleanText = text.replace(/[\u2010\u2013\u2014]/g, '-');
 
     // 1. ระดับความสำคัญสูงสุด (Priority 1): มีคีย์เวิร์ดกำกับชัดเจน (Apple Support Style)
-    // 🎯 A) เจาะจง Dell ST:XXXXXXX หรือ ST XXXXXXX ก่อนเป็นอันดับ 1 (เช่น ST:H0XCY24 บนสติกเกอร์ Dell)
-    const dellStMatch = cleanText.match(/\bST[:\s#.-]+([A-Z0-9]{7})\b/i);
+    // 🎯 A) เจาะจง Dell ST:XXXXXXX หรือ ST XXXXXXX หรือ Service Tag (เช่น ST:H0XCY 24 บนสติกเกอร์ Dell)
+    const dellStMatch = cleanText.match(/\b(?:ST|Service\s*Tag)[:\s#.-]+([A-Z0-9 -]{7,12})/i);
     if (dellStMatch && dellStMatch[1]) {
-        let cand = disambiguateSerial(dellStMatch[1].trim().toUpperCase());
-        if (isValidSerialNumber(cand)) {
-            return { sn: cand, isLabeled: true };
+        let rawCand = dellStMatch[1].replace(/[\s-]/g, '').toUpperCase();
+        if (rawCand.length >= 7) {
+            rawCand = rawCand.substring(0, 7);
+            let cand = disambiguateSerial(rawCand).replace(/O/g, '0').replace(/I/g, '1');
+            if (isValidSerialNumber(cand)) {
+                return { sn: cand, isLabeled: true };
+            }
         }
     }
 
-    // 🎯 B) Dell Express Service Code (EX:37061331052) -> แปลงเป็น 7-char Service Tag อัตโนมัติ (เช่น H0XCY24)
-    const dellExMatch = cleanText.match(/\bEX[:\s#.-]+([0-9]{10,11})\b/i);
+    // 🎯 B) Dell Express Service Code (EX:37061331052 หรือ Express Code) -> แปลงเป็น 7-char Service Tag อัตโนมัติ (เช่น H0XCY24)
+    const dellExMatch = cleanText.match(/\b(?:EX|Express)[:\s#.-]+([0-9 -]{10,14})/i);
     if (dellExMatch && dellExMatch[1]) {
         try {
-            const converted = parseInt(dellExMatch[1], 10).toString(36).toUpperCase();
-            if (converted.length === 7 && isValidSerialNumber(converted)) {
-                return { sn: converted, isLabeled: true };
+            const rawCand = dellExMatch[1].replace(/[\s-]/g, '');
+            if (rawCand.length >= 10 && rawCand.length <= 11) {
+                const converted = parseInt(rawCand, 10).toString(36).toUpperCase();
+                if (converted.length === 7 && isValidSerialNumber(converted)) {
+                    return { sn: converted, isLabeled: true };
+                }
             }
         } catch(e) {}
     }
 
-    // C) คีย์เวิร์ดกำกับทั่วไป เช่น "Serial number WVYF59WY7X", "S/N: 5CD238M2D5", "Service Tag: 4HG3KL2"
+    // C) คีย์เวิร์ดกำกับทั่วไป เช่น "Serial number WVYF59WY7X", "S/N: 5CD 238 M2D5", "Service Tag: 4HG3KL2"
     const labeledPatterns = [
-        /(?:Service\s*Tag)[:\s#.-]*([A-Z0-9]{7})/i,
-        /(?:Serial\s*(?:number|no|#|\.)?|S\/N[:\s#.]*|SN[:\s#.]*)[:\s]*([A-Z0-9]{5,18})/i,
-        /(?:S\/N|SN)[\s:]*([A-Z0-9]{7,15})/i
+        /(?:Service\s*Tag)[:\s#.-]*([A-Z0-9 -]{7,12})/i,
+        /(?:Serial\s*(?:number|no|#|\.)?|S\/N[:\s#.]*|SN[:\s#.]*)[:\s]*([A-Z0-9 -]{5,20})/i,
+        /(?:S\/N|SN)[\s:]*([A-Z0-9 -]{7,18})/i
     ];
 
     for (let pattern of labeledPatterns) {
         const match = cleanText.match(pattern);
         if (match && match[1]) {
-            let candidate = disambiguateSerial(match[1].trim().toUpperCase());
+            let cleaned = match[1].replace(/[\s-]/g, '').toUpperCase();
+            let candidate = disambiguateSerial(cleaned);
             if (isValidSerialNumber(candidate)) {
                 return { sn: candidate, isLabeled: true };
             }
         }
     }
 
-    // 2. เตรียมรายการคำค้นหา: ทั้งแบบรวมข้อความทั้งบรรทัด (แก้ปัญหาช่องว่างเช่น "SCD 112GPNW") และแยกทีละคำ
+    // 2. เตรียมรายการคำค้นหา: ทั้งแบบรวมข้อความทั้งบรรทัด (แก้ปัญหาช่องว่างเช่น "SCD 112GPNW" หรือ "HOXCY 24") และแยกทีละคำ
     const lines = cleanText.split(/\r?\n/);
     const candidateTokens = [];
 
@@ -963,10 +1020,13 @@ function extractSerialFromOcrText(text) {
             }
         }
 
-        // B) รวมตัวอักษรทั้งบรรทัดโดยตัดเว้นวรรค (ป้องกัน OCR อ่านเว้นวรรคกลาง S/N เช่น "SCD 112GPNW")
+        // B) รวมตัวอักษรทั้งบรรทัดโดยตัดเว้นวรรค (ป้องกัน OCR อ่านเว้นวรรคกลาง S/N เช่น "SCD 112GPNW" หรือ "HOXCY 24")
         const collapsed = line.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
         if (collapsed.length >= 7 && collapsed.length <= 16 && /[0-9]/.test(collapsed)) {
             candidateTokens.push(collapsed);
+        }
+        if (/^ST[A-Z0-9]{7}$/i.test(collapsed)) {
+            candidateTokens.push(collapsed.substring(2));
         }
     }
 
@@ -1014,13 +1074,22 @@ function extractSerialFromOcrText(text) {
             }
         }
 
-        // F) General Notebook S/N: 8-16 ตัวอักษร มีทั้งตัวอักษรและตัวเลข
-        if (/^[A-Z0-9]{8,16}$/.test(token)) {
+        // F) General Notebook / Asset S/N: 8-18 ตัวอักษร มีทั้งตัวอักษรและตัวเลข (เช่น TH49G7D277, 5CD238M2D5)
+        if (/^[A-Z0-9]{8,18}$/.test(token)) {
             const digitCount = (token.match(/[0-9]/g) || []).length;
             const letterCount = (token.match(/[A-Z]/g) || []).length;
-            if (digitCount >= 2 && letterCount >= 2) {
+            if (digitCount >= 1 && letterCount >= 1) {
                 return { sn: token, isLabeled: false };
             }
+        }
+
+        // G) Long Numeric Serial / Asset / Barcode ID: 9-18 หลักตัวเลขล้วน (เช่น 231215060920112, 240916030520027)
+        if (/^[0-9]{9,18}$/.test(token)) {
+            // ป้องกันเบอร์มือถือ 10 หลักขึ้นต้นด้วย 06, 08, 09
+            if (token.length === 10 && /^(?:06|08|09)/.test(token)) {
+                continue;
+            }
+            return { sn: token, isLabeled: false };
         }
     }
 
@@ -1184,7 +1253,7 @@ function handleDetectedBarcode(raw) {
 
 /**
  * ถอดรหัสตัวหนังสือ Live Text OCR สไตล์ Apple Support
- * สลับไปยังหน้า "ป้อนหมายเลขประจำเครื่อง" พร้อมกรอกค่าให้อัตโนมัติ เพื่อให้ผู้ใช้มองเห็นและตรวจทานได้ 100%
+ * สแกนและเปิดข้อมูลเครื่องตรงๆ ทันที (Direct Instant Lookup) ไม่เด้งไปหน้าพิมพ์มือ
  */
 function handleDetectedOcrSerial(cleanSn) {
     if (!cleanSn) return false;
@@ -1204,43 +1273,28 @@ function handleDetectedOcrSerial(cleanSn) {
     }
     triggerReticleFlash();
 
-    // สลับไปยังหน้า Manual Entry แบบ Apple Support (เหมือน Frame 18)
-    switchScannerMode('manual');
-
-    const input = document.getElementById('manual-sn-input');
-    const alertBox = document.getElementById('manual-ocr-detected-alert');
-    const countdownEl = document.getElementById('manual-ocr-countdown');
-
-    if (input) {
-        input.value = cleanSn;
-        handleManualInputChange();
+    // แสดงป้าย S/N ที่ยิงได้บนหน้าจอกล้องแบบ Live Pill เพื่อให้เห็นชัดเจนว่ากล้องจับเลขอะไร
+    const pill = document.getElementById('reticle-ocr-pill');
+    const pillText = document.getElementById('reticle-ocr-text');
+    if (pill && pillText) {
+        pillText.textContent = `🎯 ${cleanSn}`;
+        pill.classList.remove('opacity-0');
+        setTimeout(() => {
+            if (pill && cameraScanMode === 'continuous') pill.classList.add('opacity-0');
+        }, 1500);
     }
 
-    if (alertBox) alertBox.classList.remove('hidden');
+    // Add to recent list
+    saveRecentScan(cleanSn);
 
-    // นับถอยหลัง Auto-Advance 1.2 วินาที (หากผู้ใช้ไม่แก้ไข จะค้นหาให้อัตโนมัติ)
-    if (ocrAutoAdvanceTimer) clearTimeout(ocrAutoAdvanceTimer);
-    if (ocrCountdownInterval) clearInterval(ocrCountdownInterval);
+    // ⚡ หากเปิดโหมดยิงต่อเนื่อง (Continuous Gun Mode) ให้สะสมเข้าชุดพร้อมแสดงสรุปทันที
+    if (cameraScanMode === 'continuous') {
+        handleContinuousGunScannedBarcode(cleanSn);
+        return true;
+    }
 
-    let timeLeft = 12; // 1.2 วินาที (นับทีละ 100ms)
-    if (countdownEl) countdownEl.textContent = 'เปิดใน 1.2s...';
-
-    ocrCountdownInterval = setInterval(() => {
-        timeLeft--;
-        if (countdownEl) {
-            countdownEl.textContent = `เปิดใน ${(timeLeft / 10).toFixed(1)}s...`;
-        }
-        if (timeLeft <= 0) {
-            clearInterval(ocrCountdownInterval);
-        }
-    }, 100);
-
-    ocrAutoAdvanceTimer = setTimeout(() => {
-        clearInterval(ocrCountdownInterval);
-        if (alertBox) alertBox.classList.add('hidden');
-        submitManualSerial();
-    }, 1200);
-
+    // ⚡ ยิงตรงเข้าสู่หน้าค้นหาเครื่องทันที (Instant Direct Lookup) ไม่เด้งไปหน้าพิมพ์มือ
+    lookupDeviceBySn(cleanSn);
     return true;
 }
 
@@ -1476,8 +1530,9 @@ async function decodeBarcodeFromImageFile(file) {
                         const worker = ocrWorker || await Tesseract.createWorker('eng');
                         const ocrRes = await worker.recognize(img);
                         if (ocrRes && ocrRes.data && ocrRes.data.text) {
-                            decoded = extractSerialFromOcrText(ocrRes.data.text);
-                            if (decoded) {
+                            const detected = extractSerialFromOcrText(ocrRes.data.text);
+                            if (detected && detected.sn) {
+                                decoded = detected.sn;
                                 console.log('🎉 OCR Detected Serial Number from Image:', decoded);
                             }
                         }
@@ -1547,6 +1602,23 @@ window.clearManualInput = function() {
         input.value = '';
         handleManualInputChange();
         try { input.focus(); } catch(e) {}
+    }
+};
+
+window.toggleCharInManualInput = function(charA, charB) {
+    cancelOcrAutoAdvance();
+    const input = document.getElementById('manual-sn-input');
+    if (!input || !input.value) return;
+    let val = input.value.toUpperCase();
+    
+    if (val.includes(charA)) {
+        input.value = val.replace(new RegExp(charA, 'g'), charB);
+    } else if (val.includes(charB)) {
+        input.value = val.replace(new RegExp(charB, 'g'), charA);
+    }
+    handleManualInputChange();
+    if (navigator.vibrate) {
+        try { navigator.vibrate(40); } catch(e) {}
     }
 };
 
@@ -2843,6 +2915,44 @@ async function getCachedAssetBySn(sn) {
     // 4. Strip dashes and spaces
     const noDash = cleanSn.replace(/[\s\-_]/g, '');
     if (noDash && !candidates.includes(noDash)) candidates.push(noDash);
+
+    // 5. สลับ 2 (เลขสอง) <-> Z (ตัวแซด) ทั้งแบบแทนที่ทั้งหมดและทีละตัว
+    const baseCands = [...candidates];
+    for (const base of baseCands) {
+        if (base.includes('2')) {
+            const allZ = base.replace(/2/g, 'Z');
+            if (!candidates.includes(allZ)) candidates.push(allZ);
+            for (let i = 0; i < base.length; i++) {
+                if (base[i] === '2') {
+                    const singleZ = base.substring(0, i) + 'Z' + base.substring(i + 1);
+                    if (!candidates.includes(singleZ)) candidates.push(singleZ);
+                }
+            }
+        }
+        if (base.includes('Z')) {
+            const all2 = base.replace(/Z/g, '2');
+            if (!candidates.includes(all2)) candidates.push(all2);
+            for (let i = 0; i < base.length; i++) {
+                if (base[i] === 'Z') {
+                    const single2 = base.substring(0, i) + '2' + base.substring(i + 1);
+                    if (!candidates.includes(single2)) candidates.push(single2);
+                }
+            }
+        }
+    }
+
+    // 6. สลับ O (ตัวโอ) <-> 0 (เลขศูนย์)
+    const baseCandsForZero = [...candidates];
+    for (const base of baseCandsForZero) {
+        if (base.includes('O')) {
+            const allZero = base.replace(/O/g, '0');
+            if (!candidates.includes(allZero)) candidates.push(allZero);
+        }
+        if (base.includes('0')) {
+            const allO = base.replace(/0/g, 'O');
+            if (!candidates.includes(allO)) candidates.push(allO);
+        }
+    }
 
     try {
         const db = await openDatabase();

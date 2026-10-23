@@ -230,7 +230,13 @@
 
                     <!-- Scanning Reticle Frame (ขอบมนตัดฉากหลังโปร่งแสงสไตล์ Apple Support) -->
                     <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
-                        <div id="scanner-reticle" class="w-[88%] h-[30%] rounded-2xl border-2 border-white/85 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] relative transition-all duration-200 flex items-center justify-center">
+                        <div id="scanner-reticle" class="w-[84%] h-[48%] rounded-2xl border border-white/50 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] relative transition-all duration-300 flex items-center justify-center">
+                            <!-- 4 Precision Corner Guides -->
+                            <div class="absolute -top-0.5 -left-0.5 w-4 h-4 border-t-2 border-l-2 border-blue-400 rounded-tl-xl pointer-events-none"></div>
+                            <div class="absolute -top-0.5 -right-0.5 w-4 h-4 border-t-2 border-r-2 border-blue-400 rounded-tr-xl pointer-events-none"></div>
+                            <div class="absolute -bottom-0.5 -left-0.5 w-4 h-4 border-b-2 border-l-2 border-blue-400 rounded-bl-xl pointer-events-none"></div>
+                            <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 border-b-2 border-r-2 border-blue-400 rounded-br-xl pointer-events-none"></div>
+
                             <div id="scanner-laser" class="scanner-laser-line"></div>
                             
                             <!-- Continuous Mode Badge Indicator -->
@@ -244,6 +250,11 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Reticle Shape Toggle Button (สลับขนาดกรอบ: สติกเกอร์ / แถบบาร์โค้ด) -->
+                    <button type="button" id="btn-reticle-shape" onclick="toggleReticleShape()" class="absolute top-3 right-13 z-30 px-2.5 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white flex items-center justify-center gap-1 transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer text-xs font-semibold" title="สลับขนาดกรอบเล็ง (สติกเกอร์ / แถบบาร์โค้ด)">
+                        <span id="reticle-shape-icon">🔲</span> <span id="reticle-shape-text" class="text-[11px]">สติกเกอร์</span>
+                    </button>
 
                     <!-- Top-Right Torch Button -->
                     <button type="button" id="btn-torch" onclick="toggleTorch()" class="absolute top-3 right-3 z-30 w-8 h-8 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer" title="เปิด/ปิดไฟฉาย">
@@ -391,6 +402,18 @@
                             <div class="relative w-full">
                                 <input type="text" id="manual-sn-input" placeholder="ป้อนหมายเลขประจำเครื่อง เช่น 5CD238M2D5" class="w-full bg-[#1c1c1e] border border-neutral-700 rounded-2xl px-4 py-3.5 text-white font-mono uppercase text-base placeholder-neutral-500 focus:outline-none focus:border-blue-500 pr-10 transition-colors" oninput="handleManualInputChange()" onkeydown="if(event.key==='Enter'){event.preventDefault();submitManualSerial();}">
                                 <button type="button" onclick="clearManualInput()" class="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-neutral-700 hover:bg-neutral-600 text-neutral-300 flex items-center justify-center text-xs cursor-pointer">✕</button>
+                            </div>
+                            <div class="flex items-center gap-1.5 mt-0.5">
+                                <span class="text-[10px] text-neutral-500">แตะสลับตัวอักษร:</span>
+                                <button type="button" onclick="toggleCharInManualInput('2', 'Z')" class="px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-amber-400 border border-neutral-700 text-[11px] font-mono font-bold transition-all cursor-pointer">
+                                    2 ⇄ Z
+                                </button>
+                                <button type="button" onclick="toggleCharInManualInput('0', 'O')" class="px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-amber-400 border border-neutral-700 text-[11px] font-mono font-bold transition-all cursor-pointer">
+                                    0 ⇄ O
+                                </button>
+                                <button type="button" onclick="toggleCharInManualInput('1', 'I')" class="px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-amber-400 border border-neutral-700 text-[11px] font-mono font-bold transition-all cursor-pointer">
+                                    1 ⇄ I
+                                </button>
                             </div>
                             <p class="text-[11px] text-neutral-500 mt-0.5">
                                 ค้นหาหมายเลขประจำเครื่องบนผลิตภัณฑ์ บาร์โค้ด หรือกล่องบรรจุภัณฑ์
@@ -807,6 +830,6 @@
     </nav>
 
     <!-- Application Script -->
-    <script src="app.js?v=1.2.1"></script>
+    <script src="app.js?v=1.2.3"></script>
 </body>
 </html>
