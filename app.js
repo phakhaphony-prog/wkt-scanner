@@ -33,6 +33,177 @@ let apiUrl = localStorage.getItem(STORAGE_KEY_API_URL) || DEFAULT_GATEWAY_URL;
 let deferredInstallPrompt = null;
 
 // =========================================================================
+// 🗄️ IndexedDB Configuration & Hoisted Constants
+// =========================================================================
+const DB_NAME = 'wkt_pwa_db';
+const DB_VERSION = 1;
+const STORE_ASSETS = 'assets';
+
+// =========================================================================
+// 🛡️ System Whitelist Database Gating (ป้องกันสแกนมั่ว - สแกนเฉพาะ S/N ในระบบ)
+// =========================================================================
+const knownSnSet = new Set();
+const knownSnNormalizedMap = new Map();
+let isKnownSnCacheLoaded = false;
+
+function addSnToKnownCache(rawSn) {
+    if (!rawSn) return;
+    const sn = String(rawSn).trim().toUpperCase();
+    if (!sn) return;
+    knownSnSet.add(sn);
+
+    // Normalize: ตัดช่องว่าง ขีด และสแลช
+    const norm = sn.replace(/[\s\-_/]/g, '');
+    if (norm) {
+        knownSnNormalizedMap.set(norm, sn);
+    }
+
+    // Lenovo 1S prefix
+    if (sn.startsWith('1S') && sn.length > 3) {
+        knownSnNormalizedMap.set(sn.substring(2).replace(/[\s\-_/]/g, ''), sn);
+    }
+
+    // Dell Service Tag (7 หลัก) -> Dell Express Service Code (10-11 หลักตัวเลข)
+    if (/^[A-Z0-9]{7}$/.test(norm)) {
+        try {
+            const num = parseInt(norm, 36);
+            if (!isNaN(num) && num > 0) {
+                knownSnNormalizedMap.set(String(num), sn);
+            }
+        } catch(e) {}
+    }
+}
+
+async function initKnownSnMemoryCache() {
+    try {
+        const db = await openDatabase();
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORE_ASSETS, 'readonly');
+            const store = tx.objectStore(STORE_ASSETS);
+            if (store.getAllKeys) {
+                const req = store.getAllKeys();
+                req.onsuccess = () => {
+                    const keys = req.result || [];
+                    knownSnSet.clear();
+                    knownSnNormalizedMap.clear();
+                    for (let i = 0; i < keys.length; i++) {
+                        addSnToKnownCache(keys[i]);
+                    }
+                    isKnownSnCacheLoaded = true;
+                    console.log(`🛡️ Whitelist Loaded: ${knownSnSet.size} company S/Ns in memory`);
+                    resolve(knownSnSet.size);
+                };
+                req.onerror = () => resolve(0);
+            } else {
+                const req = store.openCursor();
+                req.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        addSnToKnownCache(cursor.key);
+                        cursor.continue();
+                    } else {
+                        isKnownSnCacheLoaded = true;
+                        console.log(`🛡️ Whitelist Loaded: ${knownSnSet.size} company S/Ns in memory`);
+                        resolve(knownSnSet.size);
+                    }
+                };
+                req.onerror = () => resolve(0);
+            }
+        });
+    } catch(err) {
+        console.warn('initKnownSnMemoryCache warning:', err);
+        return 0;
+    }
+}
+
+/**
+ * ตรวจสอบความสอดคล้องกับฐานข้อมูลระบบ (Company Database Whitelist Matching)
+ * ถ้า S/N หรือรูปแบบแปลงตรงกับเครื่องที่มีในระบบ จะส่งค่า S/N มาตรฐานในระบบกลับมา
+ * ถ้าไม่พบในระบบเลย จะคืนค่า null เพื่อระงับการสแกน (ไม่ส่งเสียง ไม่สั่น ไม่เพิ่มแถวขยะ)
+ */
+function findSystemMatchingSn(candidate) {
+    if (!candidate) return null;
+    const clean = String(candidate).trim().toUpperCase();
+    if (!clean) return null;
+
+    // หากระบบยังไม่มีข้อมูลในฐานข้อมูลออฟไลน์เลย (เช่น เพิ่งเปิดแอปครั้งแรกสุด)
+    if (knownSnSet.size === 0) {
+        return clean;
+    }
+
+    // 1. ตรวจสอบแบบตรงเป๊ะ
+    if (knownSnSet.has(clean)) return clean;
+    if (knownSnNormalizedMap.has(clean)) return knownSnNormalizedMap.get(clean);
+
+    // 2. สร้างเซตรูปแบบที่เป็นไปได้
+    const pool = new Set();
+    pool.add(clean);
+
+    // ตัด Prefix ที่มักติดมากับบาร์โค้ดหรือข้อความ OCR
+    const noPrefix = clean.replace(/^(?:\(S\)|S\/N|SN|SERVICE TAG|SERNO|ST|S)[\s:\-_]*/i, '');
+    if (noPrefix) pool.add(noPrefix);
+
+    // ตัดเครื่องหมายขีด เว้นวรรค สแลช
+    const noDash = clean.replace(/[\s\-_/]/g, '');
+    if (noDash) pool.add(noDash);
+    if (noPrefix) pool.add(noPrefix.replace(/[\s\-_/]/g, ''));
+
+    // Lenovo 1S
+    if (clean.startsWith('1S') && clean.length > 3) {
+        pool.add(clean.substring(2));
+        pool.add(clean.substring(2).replace(/[\s\-_/]/g, ''));
+    } else {
+        pool.add('1S' + clean);
+    }
+
+    // Dell Express Service Code (10-11 หลักตัวเลข แปลงเป็น Service Tag 7 ตัวอักษร)
+    if (/^[0-9]{10,11}$/.test(noDash)) {
+        try {
+            const converted = parseInt(noDash, 10).toString(36).toUpperCase();
+            if (converted && converted.length === 7) pool.add(converted);
+        } catch(e) {}
+    }
+
+    // HP Fix: SCD / SCG / SCE -> 5CD / 5CG / 5CE
+    for (const item of Array.from(pool)) {
+        if (/^S(CD|CG|CE)[A-Z0-9]{7}$/.test(item)) {
+            pool.add('5' + item.substring(1));
+        }
+    }
+
+    // สลับ Z <-> 2 (แก้ปัญหา OCR หรือคนสับสนระหว่างเลข 2 กับตัว Z)
+    for (const item of Array.from(pool)) {
+        if (item.includes('Z')) {
+            pool.add(item.replace(/Z/g, '2'));
+            for (let i = 0; i < item.length; i++) {
+                if (item[i] === 'Z') pool.add(item.substring(0, i) + '2' + item.substring(i + 1));
+            }
+        }
+        if (item.includes('2')) {
+            pool.add(item.replace(/2/g, 'Z'));
+            for (let i = 0; i < item.length; i++) {
+                if (item[i] === '2') pool.add(item.substring(0, i) + 'Z' + item.substring(i + 1));
+            }
+        }
+    }
+
+    // สลับ O <-> 0 (แก้ปัญหา OCR อ่านตัว O เป็นเลข 0 หรือสลับกัน)
+    for (const item of Array.from(pool)) {
+        if (item.includes('O')) pool.add(item.replace(/O/g, '0'));
+        if (item.includes('0')) pool.add(item.replace(/0/g, 'O'));
+    }
+
+    // ตรวจสอบทุกรูปแบบกับฐานข้อมูลบริษัท
+    for (const cand of pool) {
+        if (knownSnSet.has(cand)) return cand;
+        if (knownSnNormalizedMap.has(cand)) return knownSnNormalizedMap.get(cand);
+    }
+
+    // ถ้าไม่พบในระบบฐานข้อมูลเลย ให้คืนค่า null เพื่อหยุดการสแกน
+    return null;
+}
+
+// =========================================================================
 // 🚀 Initial Launch & Service Worker
 // =========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -68,6 +239,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize Barcode Reader engines
     await initBarcodeEngines();
+
+    // 🛡️ โหลดรายชื่อ S/N ในระบบทั้งหมดจาก IndexedDB ขึ้น RAM Memory Cache ทันที (Whitelist Gating)
+    await initKnownSnMemoryCache();
 
     // Check PIN Lock state: บังคับให้ใส่รหัส PIN ทุกครั้งที่เปิดเว็บ
     const overlay = document.getElementById('pin-lock-overlay');
@@ -848,14 +1022,22 @@ async function runOcrOnVideoReticle(cropCanvas) {
         if (result && result.data && result.data.text) {
             const detected = extractSerialFromOcrText(result.data.text);
             if (detected && detected.sn) {
-                const sn = detected.sn;
+                // 🛡️ System Whitelist Gating: ต้องตรงกับ S/N ในระบบเท่านั้น จึงจะถือว่าพบ S/N
+                const matchedSn = findSystemMatchingSn(detected.sn);
+                if (!matchedSn) {
+                    const pill = document.getElementById('reticle-ocr-pill');
+                    if (pill) pill.classList.add('opacity-0');
+                    return;
+                }
+
+                const sn = matchedSn;
                 const isLabeled = detected.isLabeled;
 
                 // Update live reticle floating pill (Apple Style)
                 const pill = document.getElementById('reticle-ocr-pill');
                 const pillText = document.getElementById('reticle-ocr-text');
                 if (pill && pillText) {
-                    pillText.textContent = sn;
+                    pillText.textContent = `🎯 ${sn}`;
                     pill.classList.remove('opacity-0');
                 }
 
@@ -965,7 +1147,11 @@ function extractSerialFromOcrText(text) {
         if (rawCand.length >= 7) {
             rawCand = rawCand.substring(0, 7);
             let cand = disambiguateSerial(rawCand).replace(/O/g, '0').replace(/I/g, '1');
-            if (isValidSerialNumber(cand)) {
+            const matched = findSystemMatchingSn(cand);
+            if (matched) {
+                return { sn: matched, isLabeled: true };
+            }
+            if (knownSnSet.size === 0 && isValidSerialNumber(cand)) {
                 return { sn: cand, isLabeled: true };
             }
         }
@@ -978,7 +1164,11 @@ function extractSerialFromOcrText(text) {
             const rawCand = dellExMatch[1].replace(/[\s-]/g, '');
             if (rawCand.length >= 10 && rawCand.length <= 11) {
                 const converted = parseInt(rawCand, 10).toString(36).toUpperCase();
-                if (converted.length === 7 && isValidSerialNumber(converted)) {
+                const matched = findSystemMatchingSn(converted);
+                if (matched) {
+                    return { sn: matched, isLabeled: true };
+                }
+                if (knownSnSet.size === 0 && converted.length === 7 && isValidSerialNumber(converted)) {
                     return { sn: converted, isLabeled: true };
                 }
             }
@@ -997,7 +1187,11 @@ function extractSerialFromOcrText(text) {
         if (match && match[1]) {
             let cleaned = match[1].replace(/[\s-]/g, '').toUpperCase();
             let candidate = disambiguateSerial(cleaned);
-            if (isValidSerialNumber(candidate)) {
+            const matched = findSystemMatchingSn(candidate);
+            if (matched) {
+                return { sn: matched, isLabeled: true };
+            }
+            if (knownSnSet.size === 0 && isValidSerialNumber(candidate)) {
                 return { sn: candidate, isLabeled: true };
             }
         }
@@ -1011,18 +1205,18 @@ function extractSerialFromOcrText(text) {
         const upperLine = line.toUpperCase();
         if (OCR_BLACKLIST.some(b => upperLine.includes(b))) continue;
 
-        // A) แยกทีละคำ (Serial Number ที่ไม่มี Label กำกับ ต้องมีตัวเลขอย่างน้อย 1 ตัวเสมอ ป้องกันคำภาษาอังกฤษทั่วไป)
+        // A) แยกทีละคำ
         const words = line.trim().split(/[\s,;|]+/);
         for (let w of words) {
             const cleanW = w.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-            if (cleanW.length >= 7 && cleanW.length <= 16 && /[0-9]/.test(cleanW)) {
+            if (cleanW.length >= 6 && cleanW.length <= 20) {
                 candidateTokens.push(cleanW);
             }
         }
 
-        // B) รวมตัวอักษรทั้งบรรทัดโดยตัดเว้นวรรค (ป้องกัน OCR อ่านเว้นวรรคกลาง S/N เช่น "SCD 112GPNW" หรือ "HOXCY 24")
+        // B) รวมตัวอักษรทั้งบรรทัดโดยตัดเว้นวรรค
         const collapsed = line.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-        if (collapsed.length >= 7 && collapsed.length <= 16 && /[0-9]/.test(collapsed)) {
+        if (collapsed.length >= 6 && collapsed.length <= 20) {
             candidateTokens.push(collapsed);
         }
         if (/^ST[A-Z0-9]{7}$/i.test(collapsed)) {
@@ -1030,7 +1224,20 @@ function extractSerialFromOcrText(text) {
         }
     }
 
-    // 3. ระดับความสำคัญรอง (Priority 2): ฟอร์แมตความมั่นใจสูงของแต่ละค่าย (HP, Lenovo, ASUS, Apple, Dell)
+    // 3. ตรวจสอบกับฐานข้อมูลระบบ (System Whitelist Matching) - ความสำคัญสูงสุด
+    for (let raw of candidateTokens) {
+        const matched = findSystemMatchingSn(raw);
+        if (matched) {
+            return { sn: matched, isLabeled: false };
+        }
+    }
+
+    // 4. หากมีฐานข้อมูลระบบ (knownSnSet > 0) แต่ไม่มีคำไหนตรงกับระบบเลย -> คืนค่า null (ไม่สแกนมั่ว)
+    if (knownSnSet.size > 0) {
+        return null;
+    }
+
+    // 5. Fallback เฉพาะเมื่อยังไม่มีฐานข้อมูลในเครื่อง (knownSnSet.size === 0)
     for (let raw of candidateTokens) {
         if (!isValidSerialNumber(raw)) continue;
         let token = disambiguateSerial(raw);
@@ -1207,12 +1414,19 @@ function handleDetectedBarcode(raw) {
     const cleanSn = sanitizeBarcodeSerial(raw);
     if (!cleanSn) return false;
 
+    // 🛡️ System Whitelist Gating: ต้องมี S/N ในระบบชีตเท่านั้น จึงจะเริ่มทำงาน
+    const matchedSn = findSystemMatchingSn(cleanSn);
+    if (!matchedSn) {
+        return false;
+    }
+    const targetSn = matchedSn;
+
     const now = Date.now();
-    if (cleanSn === lastScannedCode && (now - lastScannedTime) < 1800) {
+    if (targetSn === lastScannedCode && (now - lastScannedTime) < 1800) {
         return false;
     }
 
-    lastScannedCode = cleanSn;
+    lastScannedCode = targetSn;
     lastScannedTime = now;
 
     // Audio Beep
@@ -1230,7 +1444,7 @@ function handleDetectedBarcode(raw) {
     const pill = document.getElementById('reticle-ocr-pill');
     const pillText = document.getElementById('reticle-ocr-text');
     if (pill && pillText) {
-        pillText.textContent = `🎯 ${cleanSn}`;
+        pillText.textContent = `🎯 ${targetSn}`;
         pill.classList.remove('opacity-0');
         setTimeout(() => {
             if (pill && cameraScanMode === 'continuous') pill.classList.add('opacity-0');
@@ -1238,16 +1452,16 @@ function handleDetectedBarcode(raw) {
     }
 
     // Add to recent list
-    saveRecentScan(cleanSn);
+    saveRecentScan(targetSn);
 
     // ⚡ หากเปิดโหมดยิงต่อเนื่อง (Continuous Gun Mode) ให้สะสมเข้าชุดพร้อมแสดงสรุปแบบรูปที่ 2 ทันที (กล้องไม่เด้งปิด)
     if (cameraScanMode === 'continuous') {
-        handleContinuousGunScannedBarcode(cleanSn);
+        handleContinuousGunScannedBarcode(targetSn);
         return true;
     }
 
     // Look up device immediately! (โหมดยิงทีละเครื่อง Single Mode)
-    lookupDeviceBySn(cleanSn);
+    lookupDeviceBySn(targetSn);
     return true;
 }
 
@@ -1258,12 +1472,19 @@ function handleDetectedBarcode(raw) {
 function handleDetectedOcrSerial(cleanSn) {
     if (!cleanSn) return false;
 
+    // 🛡️ System Whitelist Gating: ต้องมี S/N ในระบบชีตเท่านั้น จึงจะเริ่มทำงาน
+    const matchedSn = findSystemMatchingSn(cleanSn);
+    if (!matchedSn) {
+        return false;
+    }
+    const targetSn = matchedSn;
+
     const now = Date.now();
-    if (cleanSn === lastScannedCode && (now - lastScannedTime) < 2200) {
+    if (targetSn === lastScannedCode && (now - lastScannedTime) < 2200) {
         return false;
     }
 
-    lastScannedCode = cleanSn;
+    lastScannedCode = targetSn;
     lastScannedTime = now;
 
     // Beep & Haptic
@@ -1277,7 +1498,7 @@ function handleDetectedOcrSerial(cleanSn) {
     const pill = document.getElementById('reticle-ocr-pill');
     const pillText = document.getElementById('reticle-ocr-text');
     if (pill && pillText) {
-        pillText.textContent = `🎯 ${cleanSn}`;
+        pillText.textContent = `🎯 ${targetSn}`;
         pill.classList.remove('opacity-0');
         setTimeout(() => {
             if (pill && cameraScanMode === 'continuous') pill.classList.add('opacity-0');
@@ -1285,16 +1506,16 @@ function handleDetectedOcrSerial(cleanSn) {
     }
 
     // Add to recent list
-    saveRecentScan(cleanSn);
+    saveRecentScan(targetSn);
 
     // ⚡ หากเปิดโหมดยิงต่อเนื่อง (Continuous Gun Mode) ให้สะสมเข้าชุดพร้อมแสดงสรุปทันที
     if (cameraScanMode === 'continuous') {
-        handleContinuousGunScannedBarcode(cleanSn);
+        handleContinuousGunScannedBarcode(targetSn);
         return true;
     }
 
     // ⚡ ยิงตรงเข้าสู่หน้าค้นหาเครื่องทันที (Instant Direct Lookup) ไม่เด้งไปหน้าพิมพ์มือ
-    lookupDeviceBySn(cleanSn);
+    lookupDeviceBySn(targetSn);
     return true;
 }
 
@@ -1891,7 +2112,7 @@ window.switchCameraScanMode = function(mode) {
     }
 };
 
-function handleContinuousGunScannedBarcode(cleanSn) {
+async function handleContinuousGunScannedBarcode(cleanSn) {
     // ป้องกันการยิงซ้ำ S/N เดิมในชุดนี้
     const isAlreadyScanned = continuousGunList.some(item => item.sn === cleanSn);
     if (isAlreadyScanned) {
@@ -1903,20 +2124,19 @@ function handleContinuousGunScannedBarcode(cleanSn) {
         return;
     }
 
-    // มีเสียง ติ๊ด! + สั่น + แถบกรอบเขียววาบ
-    playBeepSound();
-    if (navigator.vibrate) {
-        try { navigator.vibrate([60, 30, 60]); } catch(e) {}
-    }
-    triggerReticleFlash();
     showReticlePill('⚡ สแกน: ' + cleanSn);
 
-    // ตรวจสอบใน Cache ทันที
-    const cached = localSnDetailCache.get(cleanSn);
+    // 1. ตรวจสอบใน IndexedDB หรือ Cache ทันที (0ms Instant Lookup)
+    let cached = localSnDetailCache.get(cleanSn);
+    if (!cached) {
+        cached = await getCachedAssetBySn(cleanSn);
+        if (cached) localSnDetailCache.set(cleanSn, cached);
+    }
+
     if (cached) {
         continuousGunList.unshift({
             sn: cleanSn,
-            model: cached.model || '-',
+            model: cached.model || cached.name || '-',
             company: cached.company || cached.comp || '-',
             quotation: cached.quotation || cached.quote || '-',
             status: cached.status || 'Available',
@@ -2857,10 +3077,6 @@ window.confirmSubmitBatchToAdmin = async function() {
 // =========================================================================
 // 🗄️ IndexedDB Offline Storage (Zero Latency Caching)
 // =========================================================================
-const DB_NAME = 'wkt_pwa_db';
-const DB_VERSION = 1;
-const STORE_ASSETS = 'assets';
-
 function openDatabase() {
     return new Promise((resolve, reject) => {
         const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -2878,6 +3094,7 @@ function openDatabase() {
 async function saveAssetToCache(item) {
     if (!item || !item.sn) return;
     try {
+        addSnToKnownCache(item.sn);
         const db = await openDatabase();
         const tx = db.transaction(STORE_ASSETS, 'readwrite');
         tx.objectStore(STORE_ASSETS).put(item);
@@ -3007,7 +3224,10 @@ window.syncAllSheetData = async function(manual) {
                 const tx = db.transaction(STORE_ASSETS, 'readwrite');
                 const store = tx.objectStore(STORE_ASSETS);
                 rows.forEach(r => {
-                    if (r && r.sn) store.put(r);
+                    if (r && r.sn) {
+                        store.put(r);
+                        addSnToKnownCache(r.sn);
+                    }
                 });
 
                 if (badge) badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="text-emerald-400">ซิงค์แล้ว (${rows.length.toLocaleString()} เครื่อง)</span>`;
