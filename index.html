@@ -67,6 +67,8 @@
             user-select: none;
             -webkit-user-select: none;
         }
+        .pt-safe { padding-top: max(0.75rem, var(--sat)); }
+        .pb-safe { padding-bottom: max(0.75rem, var(--sab)); }
         input, textarea {
             user-select: auto;
             -webkit-user-select: auto;
@@ -546,7 +548,31 @@
                     <!-- Quotation No -->
                     <div class="py-2.5 flex justify-between items-center">
                         <span class="text-neutral-400">ใบเสนอราคา (Quotation)</span>
-                        <span id="card-quote" class="font-mono font-bold text-blue-400">-</span>
+                        <div class="flex items-center gap-2">
+                            <span id="card-quote" class="font-mono font-bold text-blue-400">-</span>
+                            <button id="card-quote-doc-pill" type="button" onclick="openQuotationPdfModal()" class="hidden px-2 py-0.5 rounded-lg text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 active:scale-95 transition-all flex items-center gap-1 cursor-pointer" title="เปิดดูเอกสาร PDF แนบ">
+                                <span>📄</span> <span>ดู PDF</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 📑 Attached Delivery Slip PDF Card (แสดงเมื่อมีไฟล์แนบ) -->
+                    <div id="card-delivery-doc-card" class="hidden my-2.5 p-3 rounded-2xl bg-gradient-to-r from-indigo-950/60 via-purple-950/30 to-neutral-900 border border-indigo-500/30 flex items-center justify-between gap-3 shadow-md">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <div class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-base font-bold border border-indigo-500/30 shrink-0">
+                                📑
+                            </div>
+                            <div class="min-w-0">
+                                <div class="text-[10px] text-indigo-300 font-semibold uppercase tracking-wider">เอกสารแนบ / ใบส่งของเซ็นรับ</div>
+                                <div id="card-delivery-doc-name" class="text-xs font-bold text-white truncate max-w-[170px] sm:max-w-xs">
+                                    เอกสารใบส่งของ.pdf
+                                </div>
+                            </div>
+                        </div>
+                        <button id="btn-card-open-pdf" type="button" onclick="openQuotationPdfModal()" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer transition-all shrink-0">
+                            <span>👁️</span>
+                            <span>เปิดดู PDF</span>
+                        </button>
                     </div>
 
                     <!-- Specs -->
@@ -730,6 +756,73 @@
                         ยกเลิก
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 📑 Modal: เปิดดูไฟล์ PDF / ใบส่งของแบบ In-App -->
+        <!-- ========================================== -->
+        <div id="modal-pdf-viewer" class="fixed inset-0 z-50 bg-black/95 backdrop-blur-md hidden flex flex-col justify-between transition-all">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-4 py-3 bg-neutral-900/95 border-b border-neutral-800 text-white shrink-0 pt-safe">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <span class="w-8 h-8 rounded-xl bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-base shrink-0">
+                        📑
+                    </span>
+                    <div class="min-w-0">
+                        <h3 id="pdf-modal-title" class="text-xs sm:text-sm font-bold text-white truncate">
+                            ใบส่งของ / เอกสารแนบ
+                        </h3>
+                        <p id="pdf-modal-sub" class="text-[10px] text-neutral-400 font-mono truncate">
+                            Quotation: -
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                    <!-- Open in Drive / External Tab -->
+                    <a id="pdf-modal-external-link" href="#" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold border border-neutral-700 flex items-center gap-1 transition-all active:scale-95" title="เปิดดูใน Google Drive แท็บใหม่">
+                        <span>🔗</span>
+                        <span class="text-[11px]">Drive</span>
+                    </a>
+                    <!-- Close button -->
+                    <button type="button" onclick="closeQuotationPdfModal()" class="w-8 h-8 rounded-xl bg-neutral-800 hover:bg-neutral-700 active:scale-90 text-neutral-300 hover:text-white font-bold text-lg flex items-center justify-center transition-all cursor-pointer">
+                        &times;
+                    </button>
+                </div>
+            </div>
+
+            <!-- PDF Viewer Iframe Body with Loading Spinner -->
+            <div class="relative flex-1 w-full bg-neutral-950 overflow-hidden flex items-center justify-center">
+                <!-- Loading Indicator -->
+                <div id="pdf-modal-loading" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-neutral-950/90 z-10 transition-opacity">
+                    <div class="w-9 h-9 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                    <div class="text-xs font-semibold text-neutral-300">กำลังโหลดเอกสาร PDF...</div>
+                    <div class="text-[11px] text-neutral-500">กำลังเชื่อมต่อ Google Drive</div>
+                </div>
+
+                <!-- Empty / Error state -->
+                <div id="pdf-modal-error" class="hidden absolute inset-0 flex flex-col items-center justify-center gap-3 bg-neutral-950 p-6 text-center z-10">
+                    <div class="text-4xl">⏳</div>
+                    <div class="text-sm font-bold text-neutral-200">ยังไม่พบไฟล์ PDF สำหรับ Quotation นี้</div>
+                    <p id="pdf-modal-error-msg" class="text-xs text-neutral-400 max-w-xs">
+                        อาจรอลูกค้าเซ็นรับเอกสาร หรือไฟล์ยังไม่ได้ซิงค์เข้า Google Drive
+                    </p>
+                    <a id="pdf-modal-error-link" href="#" target="_blank" class="hidden mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all">
+                        ลองเปิดใน Google Drive ↗
+                    </a>
+                </div>
+
+                <!-- Iframe -->
+                <iframe id="pdf-modal-iframe" src="" class="w-full h-full border-0 bg-neutral-900" allow="autoplay; fullscreen" allowfullscreen="true"></iframe>
+            </div>
+
+            <!-- Footer toolbar -->
+            <div class="px-4 py-2.5 bg-neutral-900/95 border-t border-neutral-800 flex items-center justify-between text-xs text-neutral-400 shrink-0 pb-safe">
+                <span id="pdf-modal-filesize" class="font-mono text-[11px] text-neutral-400">-</span>
+                <button type="button" onclick="closeQuotationPdfModal()" class="px-4 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-xl font-bold text-xs transition-all active:scale-95 cursor-pointer">
+                    ปิดหน้าต่าง
+                </button>
             </div>
         </div>
 

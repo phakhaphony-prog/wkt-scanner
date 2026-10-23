@@ -2780,6 +2780,9 @@ function renderAssetResultCard(item) {
 
     // 🎯 คำนวณสรุปข้อมูล Quotation: Q อะไร และ ขาดกี่ตัว
     renderQuotationProgress(item);
+
+    // 📑 แสดงเอกสารแนบ / ใบส่งของ PDF สำหรับ Quotation นี้
+    renderQuotationDoc(item);
 }
 
 function renderQuotationProgress(item) {
@@ -2894,6 +2897,7 @@ function renderApiUrlMissing(sn) {
     document.getElementById('card-days-left').textContent = "";
     document.getElementById('card-quote').textContent = "-";
     document.getElementById('card-tag').textContent = "-";
+    renderQuotationDoc(null);
 
     const statusBadge = document.getElementById('card-status-badge');
     if (statusBadge) {
@@ -2938,6 +2942,7 @@ function renderApiConnectionError(sn, err) {
     document.getElementById('card-days-left').textContent = "";
     document.getElementById('card-quote').textContent = "-";
     document.getElementById('card-tag').textContent = "-";
+    renderQuotationDoc(null);
 
     const statusBadge = document.getElementById('card-status-badge');
     if (statusBadge) {
@@ -2956,6 +2961,7 @@ function renderAssetNotFound(sn, customMessage) {
     document.getElementById('card-days-left').textContent = "";
     document.getElementById('card-quote').textContent = "-";
     document.getElementById('card-tag').textContent = "-";
+    renderQuotationDoc(null);
 
     const statusBadge = document.getElementById('card-status-badge');
     if (statusBadge) {
@@ -3170,6 +3176,173 @@ window.closeSubmitPendingModal = function() {
     const modal = document.getElementById('modal-submit-pending');
     if (modal) modal.classList.add('hidden');
 };
+
+// =========================================================================
+// 📑 ระบบเปิดดูไฟล์ PDF / ใบส่งของเซ็นรับ (In-App PDF Viewer)
+// =========================================================================
+let currentQuotationDoc = null;
+
+async function renderQuotationDoc(item) {
+    const pillBtn = document.getElementById('card-quote-doc-pill');
+    const docCard = document.getElementById('card-delivery-doc-card');
+    const docNameEl = document.getElementById('card-delivery-doc-name');
+
+    currentQuotationDoc = null;
+
+    if (!item) {
+        if (pillBtn) pillBtn.classList.add('hidden');
+        if (docCard) docCard.classList.add('hidden');
+        return;
+    }
+
+    const quotation = (item.quotation || item.quote || '').trim();
+
+    // 1. กรณี item มี deliveryDoc อยู่แล้ว (จากเซิร์ฟเวอร์หรือแคช IndexedDB)
+    if (item.deliveryDoc && (item.deliveryDoc.previewUrl || item.deliveryDoc.fileId || item.deliveryDoc.fileUrl)) {
+        currentQuotationDoc = item.deliveryDoc;
+        if (pillBtn) pillBtn.classList.remove('hidden');
+        if (docCard) {
+            docCard.classList.remove('hidden');
+            if (docNameEl) docNameEl.textContent = item.deliveryDoc.fileName || `ใบส่งของ ${quotation}.pdf`;
+        }
+        return;
+    }
+
+    // 2. ถ้าไม่มี Quotation หรือเป็น "-" ให้ซ่อน
+    if (!quotation || quotation === '-' || quotation === 'null') {
+        if (pillBtn) pillBtn.classList.add('hidden');
+        if (docCard) docCard.classList.add('hidden');
+        return;
+    }
+
+    // 3. มีเลข Quotation ให้แสดงปุ่ม pill และดึงข้อมูลเอกสาร PDF ในแบ็คกราวด์
+    if (pillBtn) pillBtn.classList.remove('hidden');
+
+    if (apiUrl) {
+        try {
+            const docUrl = `${apiUrl}?action=getDeliveryDoc&quotation=${encodeURIComponent(quotation)}`;
+            fetch(docUrl)
+                .then(r => r.json())
+                .then(res => {
+                    if (res && res.success && res.found && res.doc) {
+                        // ตรวจสอบว่าผู้ใช้ยังดูเครื่องเดิมอยู่หรือไม่
+                        if (currentAssetItem && (currentAssetItem.quotation === quotation || currentAssetItem.quote === quotation)) {
+                            currentQuotationDoc = res.doc;
+                            currentAssetItem.deliveryDoc = res.doc;
+                            try { saveAssetToCache(currentAssetItem); } catch(eCache) {}
+
+                            if (pillBtn) pillBtn.classList.remove('hidden');
+                            if (docCard) {
+                                docCard.classList.remove('hidden');
+                                if (docNameEl) docNameEl.textContent = res.doc.fileName || `ใบส่งของ ${quotation}.pdf`;
+                            }
+                        }
+                    } else {
+                        // ไม่พบเอกสารแนบ ให้ซ่อนการ์ดใบส่งของ
+                        if (docCard) docCard.classList.add('hidden');
+                    }
+                })
+                .catch(() => {});
+        } catch (e) {}
+    }
+}
+
+window.openQuotationPdfModal = async function(customDoc) {
+    const modal = document.getElementById('modal-pdf-viewer');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('pdf-modal-title');
+    const subEl = document.getElementById('pdf-modal-sub');
+    const externalLink = document.getElementById('pdf-modal-external-link');
+    const loadingEl = document.getElementById('pdf-modal-loading');
+    const errorEl = document.getElementById('pdf-modal-error');
+    const errorMsgEl = document.getElementById('pdf-modal-error-msg');
+    const iframe = document.getElementById('pdf-modal-iframe');
+    const filesizeEl = document.getElementById('pdf-modal-filesize');
+
+    let doc = customDoc || currentQuotationDoc || (currentAssetItem && currentAssetItem.deliveryDoc);
+    const quotation = (currentAssetItem && (currentAssetItem.quotation || currentAssetItem.quote)) || '-';
+
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (errorEl) errorEl.classList.add('hidden');
+    if (iframe) iframe.src = '';
+
+    if (subEl) subEl.textContent = `Quotation: ${quotation}`;
+    if (titleEl) titleEl.textContent = 'กำลังโหลดเอกสาร PDF...';
+    if (filesizeEl) filesizeEl.textContent = '';
+
+    // ถ้ายังไม่มี doc แต่มี quotation ให้ลองดึงสดแบบ Real-time
+    if (!doc && quotation && quotation !== '-') {
+        if (apiUrl) {
+            try {
+                const r = await fetch(`${apiUrl}?action=getDeliveryDoc&quotation=${encodeURIComponent(quotation)}`);
+                const res = await r.json();
+                if (res && res.success && res.found && res.doc) {
+                    doc = res.doc;
+                    currentQuotationDoc = doc;
+                    if (currentAssetItem) {
+                        currentAssetItem.deliveryDoc = doc;
+                        try { saveAssetToCache(currentAssetItem); } catch(e) {}
+                    }
+                }
+            } catch(e) {
+                console.warn('Fetch doc error:', e);
+            }
+        }
+    }
+
+    if (doc && (doc.previewUrl || doc.fileId || doc.fileUrl)) {
+        const previewUrl = doc.previewUrl || (doc.fileId ? `https://drive.google.com/file/d/${doc.fileId}/preview` : doc.fileUrl);
+        const driveUrl = doc.fileUrl || (doc.fileId ? `https://drive.google.com/file/d/${doc.fileId}/view` : previewUrl);
+
+        if (titleEl) titleEl.textContent = doc.fileName || `ใบส่งของ (${quotation})`;
+        if (filesizeEl) filesizeEl.textContent = doc.fileSize ? `ขนาด: ${doc.fileSize}` : '';
+        if (externalLink) {
+            externalLink.href = driveUrl;
+            externalLink.classList.remove('hidden');
+        }
+
+        if (iframe) {
+            iframe.onload = () => {
+                if (loadingEl) loadingEl.classList.add('hidden');
+            };
+            iframe.src = previewUrl;
+        }
+
+        // ตัวจับเวลาเผื่อ iframe ติด sandbox หรือโหลดช้า
+        setTimeout(() => {
+            if (loadingEl && !loadingEl.classList.contains('hidden')) {
+                loadingEl.classList.add('hidden');
+            }
+        }, 6000);
+    } else {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (errorEl) errorEl.classList.remove('hidden');
+        if (titleEl) titleEl.textContent = `ใบส่งของ (${quotation})`;
+        if (filesizeEl) filesizeEl.textContent = 'ยังไม่มีไฟล์แนบ';
+        if (externalLink) externalLink.classList.add('hidden');
+        if (errorMsgEl) errorMsgEl.textContent = `ยังไม่มีไฟล์ใบส่งของสำหรับ Quotation: ${quotation} ใน Google Drive`;
+    }
+};
+
+window.closeQuotationPdfModal = function() {
+    const modal = document.getElementById('modal-pdf-viewer');
+    if (modal) modal.classList.add('hidden');
+    const iframe = document.getElementById('pdf-modal-iframe');
+    if (iframe) iframe.src = '';
+    document.body.style.overflow = '';
+};
+
+// ปิด Modal เมื่อกดปุ่ม Escape
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeQuotationPdfModal();
+        closeSubmitPendingModal();
+    }
+});
 
 window.confirmSubmitBatchToAdmin = async function() {
     if (!batchScanList || batchScanList.length === 0) {
