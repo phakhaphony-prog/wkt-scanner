@@ -204,6 +204,61 @@ function findSystemMatchingSn(candidate) {
 }
 
 // =========================================================================
+// 🍞 Non-blocking Glassmorphism Toast Notification
+// =========================================================================
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'fixed top-12 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none transition-all duration-300 w-11/12 max-w-sm';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    const colorClasses = type === 'success'
+        ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-200 shadow-emerald-950/50'
+        : type === 'warning'
+        ? 'bg-amber-950/90 border-amber-500/60 text-amber-200 shadow-amber-950/50'
+        : type === 'error'
+        ? 'bg-rose-950/90 border-rose-500/60 text-rose-200 shadow-rose-950/50'
+        : 'bg-neutral-900/95 border-neutral-700/80 text-white shadow-black/60';
+
+    toast.className = `px-4 py-2.5 rounded-2xl border text-xs font-semibold backdrop-blur-xl shadow-2xl flex items-center gap-2 transform transition-all duration-300 translate-y-[-20px] opacity-0 ${colorClasses}`;
+    toast.innerHTML = `<span>${message}</span>`;
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-[-20px]', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+    });
+
+    setTimeout(() => {
+        toast.classList.add('translate-y-[-10px]', 'opacity-0');
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 300);
+    }, 2800);
+}
+
+// 🛡️ Camera Unfreeze Guardian: ปลุกกล้องให้เล่นต่อเนื่องเสมอ ไม่ให้หน้าจอค้าง
+window.wakeUpCameraIfPaused = function() {
+    const video = document.getElementById('scanner-video');
+    if (video && isScannerRunning) {
+        if (video.paused) {
+            console.log('⚡ Waking up paused camera video stream...');
+            video.play().catch(() => {});
+        }
+    }
+};
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && currentTab === 'scanner' && scannerMode === 'camera') {
+        wakeUpCameraIfPaused();
+    }
+});
+
+// =========================================================================
 // 🚀 Initial Launch & Service Worker
 // =========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -528,6 +583,17 @@ async function startLiveCamera() {
         } catch (e) {
             console.warn('Video play warning:', e);
         }
+
+        // 🛡️ Safari Watchdog: ป้องกัน iOS พักวิดีโอตอนสลับแอปหรือกดปุ่ม
+        video.onpause = () => {
+            if (isScannerRunning && currentTab === 'scanner') {
+                setTimeout(() => {
+                    if (video && video.paused && isScannerRunning) {
+                        video.play().catch(() => {});
+                    }
+                }, 100);
+            }
+        };
     }
 
     if (overlay) overlay.classList.add('hidden');
@@ -901,6 +967,12 @@ async function runDetectionFrame() {
 
     const video = document.getElementById('scanner-video');
     const reticle = document.getElementById('scanner-reticle');
+
+    // 🛡️ Auto-Healing: หากวิดีโอถูก Safari หรือระบบพัก ให้ปลุกกล้องอัตโนมัติ
+    if (video && isScannerRunning && video.paused) {
+        try { video.play(); } catch(e) {}
+    }
+
     if (video && video.readyState >= video.HAVE_CURRENT_DATA && !video.paused) {
         try {
             let barcodeFound = false;
@@ -1005,7 +1077,10 @@ const OCR_BLACKLIST = [
     // Certifications & Regulatory
     'MADE IN', 'CAN ICES', 'REV', 'CHIP', 'MEMORY', 'STARTUP', 'DISK',
     'MACINTOSH', 'MACOS', 'GOLDEN', 'GATE', 'VERSION', 'ABOUT', 'SYSTEM',
-    'HSTNN', 'TPN', '15-F20087', 'PA-1200', 'TPN-CA', 'PA-1', 'MSIP', 'R41', 'ICES-3', 'NMB-3'
+    'HSTNN', 'TPN', '15-F20087', 'PA-1200', 'TPN-CA', 'PA-1', 'MSIP', 'R41', 'ICES-3', 'NMB-3',
+
+    // Product ID / Model Number / Warranty text (Laser etched on HP / Lenovo / Dell back cases)
+    'PRODID', 'PROD ID', 'PRODUCT ID', 'PRODUCTID', 'WARRANTY', '1Y1Y0Y', '3Y3Y0Y', '3Y3Y3Y', '#AKL', 'AKL'
 ];
 
 let candidateOcrSn = null;
@@ -1175,11 +1250,11 @@ function extractSerialFromOcrText(text) {
         } catch(e) {}
     }
 
-    // C) คีย์เวิร์ดกำกับทั่วไป เช่น "Serial number WVYF59WY7X", "S/N: 5CD 238 M2D5", "Service Tag: 4HG3KL2"
+    // C) คีย์เวิร์ดกำกับทั่วไป เช่น "S N #5CD112GPNW" (HP เลเซอร์เคส), "Serial number WVYF59WY7X", "S/N: 5CD 238 M2D5", "Service Tag: 4HG3KL2"
     const labeledPatterns = [
         /(?:Service\s*Tag)[:\s#.-]*([A-Z0-9 -]{7,12})/i,
-        /(?:Serial\s*(?:number|no|#|\.)?|S\/N[:\s#.]*|SN[:\s#.]*)[:\s]*([A-Z0-9 -]{5,20})/i,
-        /(?:S\/N|SN)[\s:]*([A-Z0-9 -]{7,18})/i
+        /(?:Serial\s*(?:number|no|#|\.)?|S[\s\/\-_.]*N)[:\s#.-]+([A-Z0-9 -]{5,20})/i,
+        /(?:S[\s\/\-_.]*N)[\s:#.-]+([A-Z0-9 -]{7,18})/i
     ];
 
     for (let pattern of labeledPatterns) {
@@ -1343,14 +1418,32 @@ function sanitizeBarcodeSerial(raw) {
         return null;
     }
 
-    // 5. ตัดรหัสควบคุมพิเศษของ GS1 / DataMatrix ออก (เช่น [)> 06 \x1e \x1d)
+    // 5. ดึง Serial Number จากบาร์โค้ดแบบ 2D DataMatrix ตามมาตรฐาน ISO/IEC 15434 ของ HP / Dell / Lenovo (เช่น [)> 06 <GS> 1P3E7X6PA#AKL <GS> S5CD112GPNW หรือ 3E7X6PA#AKL;5CD112GPNW)
+    if (s.includes('\x1d') || s.includes(';') || s.includes('\x1e')) {
+        const parts = s.split(/[\x1d\x1e\x1f\x04;\r\n]+/);
+        for (let p of parts) {
+            p = p.trim();
+            const snMatch = p.match(/^(?:S|SN|1S)[:\s#]*([A-Z0-9]{7,20})$/i);
+            if (snMatch) {
+                s = snMatch[1];
+                break;
+            }
+            if (/^(?:(?:5|S)(?:CD|CG|CE)|CND|4CE|8CG)[A-Z0-9]{7}$/i.test(p)) {
+                s = p;
+                break;
+            }
+        }
+    }
+
+    // 6. ตัดรหัสควบคุมพิเศษของ GS1 / DataMatrix ออก (เช่น [)> 06 \x1e \x1d)
     s = s.replace(/^\[\)>\x1e[0-9]{2}\x1d/i, '').replace(/[\x00-\x1f\x7f]/g, '');
 
-    // 6. ตัด Prefix บาร์โค้ดทั่วไป: (S), S/N:, SN:, SERVICE TAG:, SERNO:, ST:
-    s = s.replace(/^(?:\(S\)|S\/N|SN|SERVICE TAG|SERNO|ST)[\s:\-_]*/i, '');
+    // 7. ตัด Prefix บาร์โค้ดทั่วไป: (S), S/N:, SN:, SERVICE TAG:, SERNO:, ST:, S, #
+    s = s.replace(/^(?:\(S\)|S\/N|SN|SERVICE TAG|SERNO|ST|S)[\s:#.-]*/i, '');
+    s = s.replace(/^[#:]+/, '');
     s = s.trim().toUpperCase();
 
-    // 7. ตัด Prefix '1S' ของฮาร์ดแวร์ Lenovo (บาร์โค้ด Lenovo มักมี 1S นำหน้า แต่ในชีตมักบันทึกเฉพาะตัวจริง)
+    // 8. ตัด Prefix '1S' ของฮาร์ดแวร์ Lenovo (บาร์โค้ด Lenovo มักมี 1S นำหน้า แต่ในชีตมักบันทึกเฉพาะตัวจริง)
     if (/^1S[A-Z0-9]{7,16}$/.test(s)) {
         s = s.substring(2);
     }
@@ -2241,17 +2334,49 @@ function renderContinuousGunFeed() {
     feedList.innerHTML = htmlCards;
 }
 
+let clearGunConfirmTimer = null;
+
 window.clearContinuousGunList = function() {
-    if (continuousGunList.length === 0) return;
-    if (confirm('ต้องการล้างรายการที่สแกนด้วยกล้องทั้งหมดใช่หรือไม่?')) {
-        continuousGunList = [];
-        renderContinuousGunFeed();
+    if (continuousGunList.length === 0) {
+        showToast('ℹ️ ยังไม่มีรายการที่ต้องล้าง', 'info');
+        return;
     }
+
+    const btn = document.getElementById('cam-gun-clear-btn');
+    if (btn && !btn.dataset.confirming) {
+        btn.dataset.confirming = 'true';
+        btn.dataset.origHtml = btn.innerHTML;
+        btn.innerHTML = '⚠️ ยืนยันล้าง?';
+        btn.className = 'px-3 py-2.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold rounded-xl text-xs shadow-md transition-all animate-pulse cursor-pointer';
+
+        clearGunConfirmTimer = setTimeout(() => {
+            if (btn && btn.dataset.confirming) {
+                delete btn.dataset.confirming;
+                btn.innerHTML = btn.dataset.origHtml || 'ล้าง';
+                btn.className = 'px-3 py-2.5 bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-300 rounded-xl text-xs font-semibold cursor-pointer';
+            }
+        }, 3000);
+        return;
+    }
+
+    if (clearGunConfirmTimer) clearTimeout(clearGunConfirmTimer);
+    if (btn) {
+        delete btn.dataset.confirming;
+        btn.innerHTML = btn.dataset.origHtml || 'ล้าง';
+        btn.className = 'px-3 py-2.5 bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-300 rounded-xl text-xs font-semibold cursor-pointer';
+    }
+
+    continuousGunList = [];
+    renderContinuousGunFeed();
+    showToast('🧹 ล้างรายการสแกนเรียบร้อยแล้ว', 'success');
+
+    // ปลุกกล้องให้ทำงานต่อเนื่องทันที
+    wakeUpCameraIfPaused();
 };
 
 window.addContinuousGunToBatch = function() {
     if (continuousGunList.length === 0) {
-        alert('ยังไม่มีรายการที่สแกน กรุณาส่องบาร์โค้ดก่อนครับ');
+        showToast('⚠️ ยังไม่มีรายการที่สแกน กรุณาส่องบาร์โค้ดก่อนครับ', 'warning');
         return;
     }
 
@@ -2270,10 +2395,10 @@ window.addContinuousGunToBatch = function() {
         }
     });
 
-    alert(`นำเข้า S/N สำเร็จจำนวน ${addedCount} เครื่อง! (รวมในถาดสะสม ${batchScanList.length} เครื่อง)\n\nสามารถกด "ส่งให้ Admin ตรวจสอบ" ได้ทันทีครับ`);
     continuousGunList = [];
     renderContinuousGunFeed();
     updateBatchUI();
+    showToast(`✅ นำเข้า S/N สำเร็จ ${addedCount} เครื่อง! (รวม ${batchScanList.length} เครื่อง)`, 'success');
     switchMainTab('batch');
 };
 

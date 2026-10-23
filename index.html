@@ -224,7 +224,7 @@
                 </div>
 
                 <!-- Upper Half: Viewfinder with Apple-style rounded reticle -->
-                <div id="scanner-viewfinder-box" class="w-full bg-neutral-950 rounded-3xl overflow-hidden relative aspect-[4/3] flex flex-col justify-center items-center shadow-2xl border border-neutral-800 select-none transition-all">
+                <div id="scanner-viewfinder-box" onclick="wakeUpCameraIfPaused()" class="w-full bg-neutral-950 rounded-3xl overflow-hidden relative aspect-[4/3] flex flex-col justify-center items-center shadow-2xl border border-neutral-800 select-none transition-all cursor-pointer">
                     <!-- Live Camera Video -->
                     <video id="scanner-video" playsinline webkit-playsinline autoplay muted class="w-full h-full object-cover transition-transform duration-200"></video>
 
@@ -337,7 +337,7 @@
                         <button type="button" onclick="addContinuousGunToBatch()" class="flex-1 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer">
                             <span>➕</span> <span>นำเข้าชุดสะสม (<span id="cam-gun-btn-count">0</span> เครื่อง)</span>
                         </button>
-                        <button type="button" onclick="clearContinuousGunList()" class="px-3 py-2.5 bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-300 rounded-xl text-xs font-semibold cursor-pointer">
+                        <button type="button" id="cam-gun-clear-btn" onclick="clearContinuousGunList()" class="px-3 py-2.5 bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-300 rounded-xl text-xs font-semibold cursor-pointer">
                             ล้าง
                         </button>
                         <button type="button" onclick="transferContinuousToManualTextarea()" class="px-3 py-2.5 bg-neutral-800 hover:bg-neutral-700 active:scale-95 text-neutral-300 rounded-xl text-xs font-semibold cursor-pointer" title="ย้ายข้อมูลไปดูในช่องพิมพ์">
@@ -830,6 +830,6 @@
     </nav>
 
     <!-- Application Script -->
-    <script src="app.js?v=1.2.4"></script>
+    <script src="app.js?v=1.2.6"></script>
 </body>
 </html>
