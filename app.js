@@ -2048,17 +2048,36 @@ function createScannedItemCardHtml(item, index, isDupInInput) {
         statusBadge = '<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/30">ไม่พบในระบบชีต</span>';
     } else {
         const hasContract = (company !== '-' && company !== '') || (quotation !== 'ไม่มี' && quotation !== '-');
+        
+        // กำหนดสีและสไตล์ของป้าย Stock ตามประเภทคลัง
+        let stockBadgeStyle = 'text-amber-300 bg-amber-500/15 border-amber-500/30';
+        const lowerStock = stock.toLowerCase();
+        if (lowerStock.includes('new')) {
+            stockBadgeStyle = 'text-cyan-300 bg-cyan-500/15 border-cyan-500/30';
+        } else if (lowerStock.includes('used')) {
+            stockBadgeStyle = 'text-pink-300 bg-pink-500/15 border-pink-500/30';
+        } else if (lowerStock.includes('sell') || lowerStock.includes('sold')) {
+            stockBadgeStyle = 'text-rose-300 bg-rose-500/15 border-rose-500/30';
+        } else if (lowerStock.includes('rent')) {
+            stockBadgeStyle = 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30';
+        }
+
         if (hasContract) {
             cardBg = 'bg-emerald-950/20 border-emerald-500/40 text-emerald-200';
             icon = '🟢';
-            statusBadge = '<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">ติดเช่า (มีสัญญาเดิม)</span>';
+            statusBadge = `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">🟢 ติดเช่า (${escapeHtml(stock)})</span>`;
         } else {
-            // ว่างในสต็อก (สไตล์รูปที่ 2)
+            // ว่างในสต็อก (ระบุชื่อ Stock / คลังชัดเจน)
             cardBg = 'bg-neutral-900/90 border-neutral-700/80 text-neutral-300';
             icon = '⚪';
-            statusBadge = '<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-neutral-800 text-neutral-300 border border-neutral-600">ว่างในสต็อก (ไม่มี Q./บริษัท)</span>';
+            statusBadge = `<span class="px-2 py-0.5 rounded-md text-[10px] font-black ${stockBadgeStyle} border">⚪ ว่างในสต็อก (${escapeHtml(stock)})</span>`;
         }
     }
+
+    // สีข้อความ Stock ในแถวรายละเอียด
+    const stockTextColor = stock.toLowerCase().includes('new') ? 'text-cyan-300'
+        : (stock.toLowerCase().includes('used') ? 'text-pink-300'
+        : (stock.toLowerCase().includes('sell') || stock.toLowerCase().includes('sold') ? 'text-rose-400' : 'text-amber-300'));
 
     return `
     <div class="p-2.5 rounded-xl border ${cardBg} text-xs transition-all flex flex-col gap-1.5 shadow-sm">
@@ -2071,6 +2090,8 @@ function createScannedItemCardHtml(item, index, isDupInInput) {
             <div class="shrink-0">${statusBadge}</div>
         </div>
         <div class="text-[11px] leading-relaxed pl-2 border-l-2 border-neutral-700/70 text-neutral-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span>📦 <b>Stock:</b> <span class="${stockTextColor} font-bold">${escapeHtml(stock)}</span></span>
+            <span class="text-neutral-600">|</span>
             <span>🏢 <b>บริษัท:</b> <span class="${company !== '-' ? 'text-white font-semibold' : 'text-neutral-500'}">${escapeHtml(company)}</span></span>
             <span class="text-neutral-600">|</span>
             <span>📄 <b>Q.:</b> <span class="${quotation !== 'ไม่มี' && quotation !== '-' ? 'text-white font-semibold' : 'text-neutral-500'}">${escapeHtml(quotation)}</span></span>
@@ -2399,6 +2420,7 @@ window.addContinuousGunToBatch = function() {
                 company: item.company || '-',
                 quotation: item.quotation || '-',
                 status: item.status || '-',
+                stock: item.stock || 'Stock Rent',
                 timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
             });
             addedCount++;
@@ -2590,6 +2612,7 @@ window.addBulkManualToBatch = function() {
                 company: cached.company || cached.comp || '-',
                 quotation: cached.quotation || cached.quote || '-',
                 status: cached.status || 'Available',
+                stock: cached.stock || cached.sheet || 'Stock Rent',
                 timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
             });
             addedCount++;
@@ -3019,22 +3042,33 @@ function updateBatchUI() {
         return;
     }
 
-    listEl.innerHTML = batchScanList.map((item, idx) => `
+    listEl.innerHTML = batchScanList.map((item, idx) => {
+        const itemStock = item.stock || 'Stock Rent';
+        let stockStyle = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+        const stLower = itemStock.toLowerCase();
+        if (stLower.includes('new')) stockStyle = 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30';
+        else if (stLower.includes('used')) stockStyle = 'text-pink-400 bg-pink-500/10 border-pink-500/30';
+        else if (stLower.includes('sell') || stLower.includes('sold')) stockStyle = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
+
+        return `
         <div class="bg-[#1c1c1e] p-3 rounded-2xl border border-neutral-800 flex items-center justify-between shadow-sm">
             <div class="flex items-center gap-3">
                 <span class="text-xs bg-blue-500/20 text-blue-400 font-bold px-2 py-0.5 rounded-lg font-mono">
                     #${batchScanList.length - idx}
                 </span>
                 <div>
-                    <div class="font-mono font-bold text-sm text-white tracking-wider">${item.sn}</div>
-                    <div class="text-[11px] text-neutral-400 truncate max-w-[200px]">${item.model || '-'}</div>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="font-mono font-bold text-sm text-white tracking-wider">${escapeHtml(item.sn)}</span>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${stockStyle}">${escapeHtml(itemStock)}</span>
+                    </div>
+                    <div class="text-[11px] text-neutral-400 truncate max-w-[200px]">${escapeHtml(item.model || '-')}</div>
                 </div>
             </div>
             <button type="button" onclick="removeBatchItem('${item.sn}')" class="text-rose-400 hover:text-rose-300 text-xs p-1.5 rounded-lg hover:bg-rose-500/20">
                 ✕
             </button>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 window.removeBatchItem = function(sn) {
