@@ -1,5 +1,5 @@
 // WKT S/N Scanner - Service Worker
-const CACHE_NAME = 'wkt-scan-v1.3.0';
+const CACHE_NAME = 'wkt-scan-v1.3.2';
 const STATIC_ASSETS = [
   './',
   './index.html',
