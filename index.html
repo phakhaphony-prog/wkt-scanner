@@ -792,13 +792,13 @@
                 </div>
             </div>
 
-            <!-- PDF Viewer Viewport with Pinch-to-Zoom & Pan Stage -->
-            <div id="pdf-viewer-viewport" class="relative flex-1 w-full bg-neutral-950 overflow-hidden flex items-center justify-center select-none">
+            <!-- PDF Viewer Viewport (Unified Canvas & Fallback) -->
+            <div id="pdf-viewer-viewport" class="relative flex-1 w-full bg-neutral-950 overflow-hidden flex flex-col items-center justify-start select-none">
                 <!-- Loading Indicator -->
                 <div id="pdf-modal-loading" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-neutral-950/90 z-30 transition-opacity">
                     <div class="w-9 h-9 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-                    <div class="text-xs font-semibold text-neutral-300">กำลังโหลดเอกสาร PDF...</div>
-                    <div class="text-[11px] text-neutral-500">กำลังเชื่อมต่อ Google Drive</div>
+                    <div id="pdf-modal-loading-text" class="text-xs font-semibold text-neutral-300">กำลังโหลดเอกสาร PDF...</div>
+                    <div class="text-[11px] text-neutral-500">เรนเดอร์คมชัดระดับ Retina คมชัดทุก S/N</div>
                 </div>
 
                 <!-- Empty / Error state -->
@@ -813,46 +813,46 @@
                     </a>
                 </div>
 
-                <!-- Zoomable Stage Container (Hardware-Accelerated CSS Transform) -->
-                <div id="pdf-zoom-stage" class="absolute inset-0 w-full h-full origin-top-left flex items-center justify-center will-change-transform" style="transform: translate3d(0px, 0px, 0px) scale(1);">
+                <!-- 📜 Unified Canvas Pages Scroll Container (Native 60fps Momentum Scrolling & Pinch Zoom) -->
+                <div id="pdf-scroll-container" class="w-full h-full overflow-y-auto overflow-x-auto p-3 flex flex-col items-center select-none" style="-webkit-overflow-scrolling: touch; touch-action: pan-x pan-y pinch-zoom;">
+                    <div id="pdf-pages-stage" class="w-full flex flex-col items-center space-y-4 transition-[width] duration-150">
+                        <!-- Canvas pages rendered dynamically by PDF.js -->
+                    </div>
+                </div>
+
+                <!-- Fallback iframe Container (Used if PDF.js fails) -->
+                <div id="pdf-iframe-container" class="hidden absolute inset-0 w-full h-full">
                     <iframe id="pdf-modal-iframe" src="" class="w-full h-full border-0 bg-neutral-900 pointer-events-auto" style="-webkit-overflow-scrolling: touch;" allow="autoplay; fullscreen" allowfullscreen="true"></iframe>
                 </div>
 
-                <!-- Touch Gesture Overlay Layer (Captures 2-finger pinch, 1-finger pan, double-tap, mouse drag & wheel) -->
-                <div id="pdf-touch-layer" class="absolute inset-0 z-20 cursor-grab active:cursor-grabbing select-none pointer-events-none touch-none" title="ใช้ 2 นิ้วซูมเข้า-ออก หรือดับเบิ้ลคลิก/แตะขยาย"></div>
-
-                <!-- Floating Gesture Hint (Disappears after 3.5s or on first interaction) -->
-                <div id="pdf-gesture-hint" class="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-neutral-900/90 backdrop-blur-md border border-neutral-700/80 text-white text-[11px] font-medium shadow-xl flex items-center gap-1.5 transition-all duration-500">
-                    <span class="text-sm">📜</span>
-                    <span>เลื่อนดูเอกสารขึ้น-ลงได้ตามปกติ • กด ➕ เพื่อซูมขยาย</span>
+                <!-- Floating Gesture Hint (Disappears after 3.5s) -->
+                <div id="pdf-gesture-hint" class="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-neutral-900/90 backdrop-blur-md border border-neutral-700/80 text-white text-[11px] font-medium shadow-xl flex items-center gap-1.5 transition-all duration-500">
+                    <span class="text-sm">🖐️</span>
+                    <span>ใช้นิ้วเลื่อนดูทุกหน้า • กาง 2 นิ้วซูมขยายได้ทันที</span>
                 </div>
 
-                <!-- Floating Quick Zoom Toolbar (Placed at TOP-RIGHT so it never overlaps Google Drive's bottom bar) -->
+                <!-- Floating Quick Zoom Toolbar (Top-Right) -->
                 <div class="absolute top-3 right-3 z-30 flex items-center gap-1 bg-neutral-900/90 backdrop-blur-md p-1 rounded-2xl border border-neutral-700/80 shadow-2xl">
-                    <button type="button" onclick="zoomQuotationPdf(-0.35)" class="w-8 h-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-200 flex items-center justify-center font-bold text-sm transition-all cursor-pointer" title="ซูมออก (-35%)">
+                    <button type="button" onclick="zoomUnifiedPdf(-0.35)" class="w-8 h-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-200 flex items-center justify-center font-bold text-sm transition-all cursor-pointer" title="ซูมออก (-35%)">
                         ➖
                     </button>
-                    <button type="button" onclick="resetQuotationPdfZoom()" id="pdf-zoom-percent-badge" class="px-2.5 h-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-95 text-indigo-400 font-mono font-bold text-xs flex items-center justify-center transition-all cursor-pointer" title="แตะเพื่อรีเซ็ตขนาด 100%">
+                    <button type="button" onclick="resetUnifiedPdfZoom()" id="pdf-zoom-percent-badge" class="px-2.5 h-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-95 text-indigo-400 font-mono font-bold text-xs flex items-center justify-center transition-all cursor-pointer" title="แตะเพื่อรีเซ็ตขนาด 100%">
                         100%
                     </button>
-                    <button type="button" onclick="zoomQuotationPdf(0.35)" class="w-8 h-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-200 flex items-center justify-center font-bold text-sm transition-all cursor-pointer" title="ซูมเข้า (+35%)">
+                    <button type="button" onclick="zoomUnifiedPdf(0.35)" class="w-8 h-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-200 flex items-center justify-center font-bold text-sm transition-all cursor-pointer" title="ซูมเข้า (+35%)">
                         ➕
                     </button>
-                    <button type="button" onclick="resetQuotationPdfZoom()" class="w-8 h-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-300 hover:text-white flex items-center justify-center text-xs font-bold transition-all cursor-pointer" title="รีเซ็ตกลับเป็นปกติ">
+                    <button type="button" onclick="resetUnifiedPdfZoom()" class="w-8 h-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-300 hover:text-white flex items-center justify-center text-xs font-bold transition-all cursor-pointer" title="รีเซ็ตกลับเป็นปกติ">
                         ↺
                     </button>
                 </div>
             </div>
 
-            <!-- Footer toolbar -->
+            <!-- Footer toolbar (Clean & Simple, No Mode Switcher Needed!) -->
             <div class="px-4 py-2.5 bg-neutral-900/95 border-t border-neutral-800 flex items-center justify-between text-xs text-neutral-400 shrink-0 pb-safe">
                 <div class="flex items-center gap-2">
                     <span id="pdf-modal-filesize" class="font-mono text-[11px] text-neutral-400">-</span>
-                    <!-- Touch / Drive Mode Switcher -->
-                    <button type="button" id="pdf-mode-toggle-btn" onclick="togglePdfTouchMode()" class="px-2.5 py-1 rounded-lg bg-neutral-800 text-[11px] text-indigo-300 border border-neutral-700 hover:bg-neutral-700 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5" title="สลับระหว่างโหมดเลื่อนอ่านเอกสาร และโหมดซูมอิสระ">
-                        <span id="pdf-mode-icon">📜</span>
-                        <span id="pdf-mode-text">โหมดเลื่อนอ่าน</span>
-                    </button>
+                    <span id="pdf-page-count-badge" class="px-2 py-0.5 rounded-md bg-neutral-800/90 text-[10px] text-neutral-300 border border-neutral-700">เอกสาร PDF</span>
                 </div>
                 <button type="button" onclick="closeQuotationPdfModal()" class="px-4 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-xl font-bold text-xs transition-all active:scale-95 cursor-pointer">
                     ปิดหน้าต่าง
@@ -956,7 +956,9 @@
         </button>
     </nav>
 
+    <!-- PDF.js library for Canvas PDF rendering (Simultaneous 1-finger scroll & 2-finger pinch in the same mode) -->
+    <script src="pdf.min.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.3.3"></script>
+    <script src="app.js?v=1.3.4"></script>
 </body>
 </html>
