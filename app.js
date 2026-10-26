@@ -3411,8 +3411,8 @@ window.applyUnifiedPdfZoom = function(targetScale, animated = true) {
 
     const container = document.getElementById('pdf-scroll-container');
     const stage = document.getElementById('pdf-pages-stage');
+    const iframeStage = document.getElementById('pdf-iframe-stage');
     const badge = document.getElementById('pdf-zoom-percent-badge');
-    if (!stage || !container) return;
 
     const pct = Math.round(pdfUnifiedScale * 100);
     if (badge) {
@@ -3424,19 +3424,34 @@ window.applyUnifiedPdfZoom = function(targetScale, animated = true) {
         }
     }
 
-    // คำนวณความกว้างพื้นฐานให้พอดีหน้าจอ container
-    const containerW = container.clientWidth > 0 ? container.clientWidth - 24 : window.innerWidth - 24;
-    const baseW = Math.max(containerW, 280);
-    const targetW = Math.round(baseW * pdfUnifiedScale);
+    if (container && stage) {
+        // คำนวณความกว้างพื้นฐานให้พอดีหน้าจอ container
+        const containerW = container.clientWidth > 0 ? container.clientWidth - 24 : window.innerWidth - 24;
+        const baseW = Math.max(containerW, 280);
+        const targetW = Math.round(baseW * pdfUnifiedScale);
 
-    if (animated) {
-        stage.style.transition = 'width 0.22s cubic-bezier(0.2, 0.9, 0.4, 1)';
-    } else {
-        stage.style.transition = 'none';
+        if (animated) {
+            stage.style.transition = 'width 0.22s cubic-bezier(0.2, 0.9, 0.4, 1)';
+        } else {
+            stage.style.transition = 'none';
+        }
+
+        stage.style.width = `${targetW}px`;
+        stage.style.minWidth = `${targetW}px`;
+        stage.style.maxWidth = `${targetW}px`;
     }
 
-    stage.style.width = `${targetW}px`;
-    stage.style.maxWidth = `${targetW}px`;
+    // กรณีสำรองที่เปิดผ่าน iframe ให้ซูม iframe ได้ด้วย
+    if (iframeStage) {
+        if (animated) {
+            iframeStage.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.4, 1)';
+        } else {
+            iframeStage.style.transition = 'none';
+        }
+        iframeStage.style.transform = `scale(${pdfUnifiedScale})`;
+        iframeStage.style.width = `${100 * pdfUnifiedScale}%`;
+        iframeStage.style.height = `${100 * pdfUnifiedScale}%`;
+    }
 };
 
 window.zoomUnifiedPdf = function(delta) {
@@ -3471,6 +3486,31 @@ function initUnifiedPdfGestures() {
     if (!container || isPdfGesturesBound) return;
     isPdfGesturesBound = true;
 
+    // 1. iOS Safari Hardware Pinch Events (iPhone / iPad)
+    container.addEventListener('gesturestart', (e) => {
+        e.preventDefault();
+        hidePdfHint();
+        isPinchingPdf = true;
+        pinchStartScale = pdfUnifiedScale;
+    }, { passive: false });
+
+    container.addEventListener('gesturechange', (e) => {
+        e.preventDefault();
+        if (isPinchingPdf) {
+            const newScale = Math.min(Math.max(pinchStartScale * e.scale, PDF_MIN_SCALE), PDF_MAX_SCALE);
+            applyUnifiedPdfZoom(newScale, false);
+        }
+    }, { passive: false });
+
+    container.addEventListener('gestureend', (e) => {
+        e.preventDefault();
+        isPinchingPdf = false;
+        let finalScale = Math.min(Math.max(pdfUnifiedScale, PDF_MIN_SCALE), PDF_MAX_SCALE);
+        if (finalScale < 1.05) finalScale = 1.0;
+        applyUnifiedPdfZoom(finalScale, true);
+    }, { passive: false });
+
+    // 2. Standard Touch Events (Android Chrome, Desktop Touch, Cross-browser)
     container.addEventListener('touchstart', (e) => {
         hidePdfHint();
 
@@ -3500,7 +3540,7 @@ function initUnifiedPdfGestures() {
         }
     }, { passive: false });
 
-    container.addEventListener('touchmove', (e) => {
+    window.addEventListener('touchmove', (e) => {
         if (isPinchingPdf && e.touches.length === 2) {
             e.preventDefault();
             const t1 = e.touches[0];
@@ -3524,8 +3564,8 @@ function initUnifiedPdfGestures() {
         }
     };
 
-    container.addEventListener('touchend', endTouch);
-    container.addEventListener('touchcancel', endTouch);
+    window.addEventListener('touchend', endTouch);
+    window.addEventListener('touchcancel', endTouch);
 
     // Trackpad Pinch / Mouse Wheel with Ctrl (Mac / PC / iPad Trackpad)
     container.addEventListener('wheel', (e) => {
@@ -3538,26 +3578,35 @@ function initUnifiedPdfGestures() {
     }, { passive: false });
 }
 
-// 📑 เรนเดอร์ PDF หน้าต่อหน้าด้วย PDF.js บน Canvas ระดับ 2x Retina
-async function renderPdfWithPdfJs(base64Data, fileName, fileSize) {
+// 📑 เรนเดอร์ PDF หน้าต่อหน้าด้วย PDF.js บน Canvas ระดับ 2x Retina (รองรับทั้ง Uint8Array, ArrayBuffer, base64)
+async function renderPdfWithData(pdfData, fileName, fileSize) {
     if (!window.pdfjsLib) {
         throw new Error('PDF.js library not loaded');
     }
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
 
-    let rawBase64 = base64Data;
-    if (rawBase64.startsWith('data:')) {
-        rawBase64 = rawBase64.split(',')[1];
-    }
-    const byteCharacters = atob(rawBase64);
-    const byteNumbers = new Uint8Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    let uint8Array;
+    if (pdfData instanceof Uint8Array) {
+        uint8Array = pdfData;
+    } else if (pdfData instanceof ArrayBuffer) {
+        uint8Array = new Uint8Array(pdfData);
+    } else if (typeof pdfData === 'string') {
+        let rawBase64 = pdfData;
+        if (rawBase64.startsWith('data:')) {
+            rawBase64 = rawBase64.split(',')[1];
+        }
+        const byteCharacters = atob(rawBase64);
+        uint8Array = new Uint8Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            uint8Array[i] = byteCharacters.charCodeAt(i);
+        }
+    } else {
+        throw new Error('Invalid PDF data format');
     }
 
     const myToken = ++currentPdfRenderToken;
     const loadingTask = window.pdfjsLib.getDocument({
-        data: byteNumbers,
+        data: uint8Array,
         cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
         cMapPacked: true
     });
@@ -3618,7 +3667,7 @@ async function renderPdfWithPdfJs(base64Data, fileName, fileSize) {
     applyUnifiedPdfZoom(1.0, false);
 }
 
-// 🌐 Fallback: กรณีไฟล์ใหญ่มากหรือดึง base64 ไม่สำเร็จ ให้ใช้ Google Drive preview iframe
+// 🌐 Fallback: กรณีไฟล์ใหญ่มากหรือดึงไม่สำเร็จ ให้ใช้ Google Drive preview iframe
 function fallbackToIframe(previewUrl, driveUrl, fileName, fileSize) {
     const scrollContainer = document.getElementById('pdf-scroll-container');
     const iframeContainer = document.getElementById('pdf-iframe-container');
@@ -3718,20 +3767,47 @@ window.openQuotationPdfModal = async function(customDoc) {
             externalLink.classList.remove('hidden');
         }
 
-        // 1. ตรวจสอบ Offline IndexedDB Cache ก่อนเลย (Zero-latency offline)
         const cacheKey = fileId || quotation;
-        let cached = await getCachedPdf(cacheKey);
 
-        if (cached && cached.base64) {
+        // 1. ตรวจสอบ Offline IndexedDB Cache ก่อนเลย (Zero-latency offline)
+        let cached = await getCachedPdf(cacheKey);
+        if (cached && (cached.uint8Array || cached.base64)) {
             try {
-                await renderPdfWithPdfJs(cached.base64, cached.fileName || fileName, cached.fileSize || fileSize);
+                await renderPdfWithData(cached.uint8Array || cached.base64, cached.fileName || fileName, cached.fileSize || fileSize);
                 return;
             } catch(renderErr) {
-                console.warn('Cached PDF render error, refreshing:', renderErr);
+                console.warn('Cached PDF render error, trying network fetch:', renderErr);
             }
         }
 
-        // 2. ดึง getPdfBase64 จาก Apps Script Backend
+        // 2. ⚡ ดึงตรงจาก Google Drive UserContent (Direct High-Speed Fetch - Bypass Apps Script OAuth!)
+        if (fileId) {
+            try {
+                const directUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+                const directRes = await fetch(directUrl);
+                if (directRes.ok) {
+                    const buf = await directRes.arrayBuffer();
+                    if (buf && buf.byteLength > 100) {
+                        const uint8 = new Uint8Array(buf);
+                        const calcSize = fileSize || `${(buf.byteLength / 1024).toFixed(1)} KB`;
+                        try {
+                            await setCachedPdf(cacheKey, {
+                                uint8Array: uint8,
+                                fileName: fileName,
+                                fileSize: calcSize
+                            });
+                        } catch(eC) {}
+
+                        await renderPdfWithData(uint8, fileName, calcSize);
+                        return;
+                    }
+                }
+            } catch(directErr) {
+                console.warn('Direct PDF fetch error, trying backend:', directErr);
+            }
+        }
+
+        // 3. ดึง getPdfBase64 จาก Apps Script Backend (กรณีไฟล์ต้องการสิทธิ์พิเศษ)
         if (apiUrl) {
             try {
                 const fetchUrl = `${apiUrl}?action=getPdfBase64${fileId ? `&fileId=${encodeURIComponent(fileId)}` : `&quotation=${encodeURIComponent(quotation)}`}`;
@@ -3739,7 +3815,6 @@ window.openQuotationPdfModal = async function(customDoc) {
                 const b64Json = await b64Res.json();
 
                 if (b64Json && b64Json.success && b64Json.base64) {
-                    // เซฟลง IndexedDB Cache เพื่อให้เปิดออฟไลน์ได้ทันที
                     try {
                         await setCachedPdf(cacheKey, {
                             base64: b64Json.base64,
@@ -3748,7 +3823,7 @@ window.openQuotationPdfModal = async function(customDoc) {
                         });
                     } catch(eCache) {}
 
-                    await renderPdfWithPdfJs(b64Json.base64, b64Json.fileName || fileName, b64Json.fileSize || fileSize);
+                    await renderPdfWithData(b64Json.base64, b64Json.fileName || fileName, b64Json.fileSize || fileSize);
                     return;
                 }
             } catch(fetchErr) {
@@ -3756,7 +3831,7 @@ window.openQuotationPdfModal = async function(customDoc) {
             }
         }
 
-        // 3. Fallback ไป Google Drive preview iframe ถ้าเรนเดอร์ base64 ไม่สำเร็จ
+        // 4. Fallback ไป Google Drive preview iframe ถ้าเรนเดอร์ base64/direct ไม่สำเร็จ
         fallbackToIframe(previewUrl, driveUrl, fileName, fileSize);
     } else {
         if (loadingEl) loadingEl.classList.add('hidden');
