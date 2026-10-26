@@ -3405,7 +3405,7 @@ function getPdfViewportElements() {
 }
 
 function updatePdfTransform(animated = false) {
-    const { stage, badge } = getPdfViewportElements();
+    const { stage, badge, touchLayer, iframe, modeIcon, modeText } = getPdfViewportElements();
     if (!stage) return;
 
     if (animated) {
@@ -3419,8 +3419,30 @@ function updatePdfTransform(animated = false) {
     const roundedScale = Math.round(pdfZoomScale * 1000) / 1000;
     stage.style.transform = `translate3d(${roundedX}px, ${roundedY}px, 0) scale(${roundedScale})`;
 
+    const pct = Math.round(pdfZoomScale * 100);
+
+    // ⚡ Auto-Smart Pointer-Events:
+    // เมื่ออยู่ที่ 100% (ขนาดปกติ) ให้เลื่อนดูเอกสารใน iframe ได้ทันที ไม่โดนบล็อก
+    // เมื่อซูมขยาย (> 100%) ให้เปิด Touch Layer เพื่อให้ลากแพนดูส่วนขยายได้อิสระ
+    if (pdfZoomScale <= 1.02 && !isPdfTouchZoomMode) {
+        if (touchLayer) touchLayer.style.pointerEvents = 'none';
+        if (iframe) {
+            iframe.classList.remove('pointer-events-none');
+            iframe.classList.add('pointer-events-auto');
+        }
+        if (modeIcon) modeIcon.textContent = '📜';
+        if (modeText) modeText.textContent = 'โหมดเลื่อนอ่าน';
+    } else if (pdfZoomScale > 1.02) {
+        if (touchLayer) touchLayer.style.pointerEvents = 'auto';
+        if (iframe) {
+            iframe.classList.add('pointer-events-none');
+            iframe.classList.remove('pointer-events-auto');
+        }
+        if (modeIcon) modeIcon.textContent = '🖐️';
+        if (modeText) modeText.textContent = `ซูม ${pct}%`;
+    }
+
     if (badge) {
-        const pct = Math.round(pdfZoomScale * 100);
         badge.textContent = `${pct}%`;
         if (pct !== 100) {
             badge.className = 'px-2.5 h-8 rounded-xl bg-indigo-600/30 text-indigo-300 font-mono font-bold text-xs flex items-center justify-center border border-indigo-500/40 shadow-xs transition-all cursor-pointer';
@@ -3447,7 +3469,7 @@ function clampPdfBounds() {
 
     const scaledW = W * pdfZoomScale;
     const scaledH = H * pdfZoomScale;
-    const buffer = 30; // Buffer margin in px
+    const buffer = 40; // Buffer margin in px
 
     const minX = W - scaledW - buffer;
     const maxX = buffer;
@@ -3463,11 +3485,6 @@ function clampPdfBounds() {
 window.zoomQuotationPdf = function(delta) {
     const { viewport } = getPdfViewportElements();
     if (!viewport) return;
-
-    // Auto-enable touch mode if switched to document click mode
-    if (!isPdfTouchZoomMode) {
-        window.togglePdfTouchMode(true);
-    }
 
     const rect = viewport.getBoundingClientRect();
     const midX = rect.width / 2;
@@ -3491,6 +3508,7 @@ window.resetQuotationPdfZoom = function() {
     pdfZoomScale = 1.0;
     pdfTranslateX = 0;
     pdfTranslateY = 0;
+    isPdfTouchZoomMode = false;
     updatePdfTransform(true);
 };
 
@@ -3506,13 +3524,17 @@ window.togglePdfTouchMode = function(forceZoomMode) {
         if (isPdfTouchZoomMode) {
             touchLayer.style.pointerEvents = 'auto';
             iframe.classList.add('pointer-events-none');
+            iframe.classList.remove('pointer-events-auto');
             if (modeIcon) modeIcon.textContent = '🖐️';
             if (modeText) modeText.textContent = 'โหมดซูมอิสระ';
+            showPdfHint('🖐️ เปิดโหมดซูม: ใช้นิ้วหนีบกางซูม หรือกดปุ่ม ➕ ➖');
         } else {
             touchLayer.style.pointerEvents = 'none';
             iframe.classList.remove('pointer-events-none');
-            if (modeIcon) modeIcon.textContent = '👆';
-            if (modeText) modeText.textContent = 'โหมดแตะเอกสาร';
+            iframe.classList.add('pointer-events-auto');
+            if (modeIcon) modeIcon.textContent = '📜';
+            if (modeText) modeText.textContent = 'โหมดเลื่อนอ่าน';
+            showPdfHint('📜 โหมดเลื่อนอ่าน: ใช้นิ้วเลื่อนดูเอกสารขึ้น-ลงได้ทุกหน้า');
         }
     }
 };
@@ -3725,15 +3747,19 @@ function handlePdfDoubleTap(clientX, clientY) {
     }
 }
 
-function showPdfHint() {
+function showPdfHint(customText) {
     const { hint } = getPdfViewportElements();
     if (!hint) return;
+    if (customText) {
+        const textSpan = hint.querySelector('span:last-child') || hint;
+        textSpan.textContent = customText;
+    }
     hint.classList.remove('opacity-0', 'pointer-events-none');
     hint.classList.add('opacity-100');
     if (pdfHintTimeout) clearTimeout(pdfHintTimeout);
     pdfHintTimeout = setTimeout(() => {
         hidePdfHint();
-    }, 3800);
+    }, 3500);
 }
 
 function hidePdfHint() {
@@ -3751,11 +3777,11 @@ window.openQuotationPdfModal = async function(customDoc) {
     const modal = document.getElementById('modal-pdf-viewer');
     if (!modal) return;
 
-    // Reset zoom and init gesture events
+    // Reset zoom and init gesture events in Scroll Mode (โหมดเลื่อนอ่านเอกสาร)
     initPdfGestureEvents();
     window.resetQuotationPdfZoom();
-    window.togglePdfTouchMode(true);
-    showPdfHint();
+    window.togglePdfTouchMode(false); // 📜 เริ่มต้นที่โหมดเลื่อนอ่านเอกสารเสมอ ให้เลื่อนดูหน้าล่างๆ ได้ทันที!
+    showPdfHint('📜 เลื่อนดูเอกสารขึ้น-ลงได้ทันที • กด ➕ เพื่อซูมขยาย');
 
     const titleEl = document.getElementById('pdf-modal-title');
     const subEl = document.getElementById('pdf-modal-sub');

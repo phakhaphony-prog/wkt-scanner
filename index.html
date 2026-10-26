@@ -793,7 +793,7 @@
             </div>
 
             <!-- PDF Viewer Viewport with Pinch-to-Zoom & Pan Stage -->
-            <div id="pdf-viewer-viewport" class="relative flex-1 w-full bg-neutral-950 overflow-hidden flex items-center justify-center select-none touch-none">
+            <div id="pdf-viewer-viewport" class="relative flex-1 w-full bg-neutral-950 overflow-hidden flex items-center justify-center select-none">
                 <!-- Loading Indicator -->
                 <div id="pdf-modal-loading" class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-neutral-950/90 z-30 transition-opacity">
                     <div class="w-9 h-9 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
@@ -815,20 +815,20 @@
 
                 <!-- Zoomable Stage Container (Hardware-Accelerated CSS Transform) -->
                 <div id="pdf-zoom-stage" class="absolute inset-0 w-full h-full origin-top-left flex items-center justify-center will-change-transform" style="transform: translate3d(0px, 0px, 0px) scale(1);">
-                    <iframe id="pdf-modal-iframe" src="" class="w-full h-full border-0 bg-neutral-900 pointer-events-none" allow="autoplay; fullscreen" allowfullscreen="true"></iframe>
+                    <iframe id="pdf-modal-iframe" src="" class="w-full h-full border-0 bg-neutral-900 pointer-events-auto" style="-webkit-overflow-scrolling: touch;" allow="autoplay; fullscreen" allowfullscreen="true"></iframe>
                 </div>
 
                 <!-- Touch Gesture Overlay Layer (Captures 2-finger pinch, 1-finger pan, double-tap, mouse drag & wheel) -->
-                <div id="pdf-touch-layer" class="absolute inset-0 z-20 cursor-grab active:cursor-grabbing select-none touch-none" title="ใช้ 2 นิ้วซูมเข้า-ออก หรือดับเบิ้ลคลิก/แตะขยาย"></div>
+                <div id="pdf-touch-layer" class="absolute inset-0 z-20 cursor-grab active:cursor-grabbing select-none pointer-events-none touch-none" title="ใช้ 2 นิ้วซูมเข้า-ออก หรือดับเบิ้ลคลิก/แตะขยาย"></div>
 
-                <!-- Floating Gesture Hint (Disappears after 3.8s or on first interaction) -->
-                <div id="pdf-gesture-hint" class="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-neutral-900/90 backdrop-blur-md border border-neutral-700/80 text-white text-[11px] font-medium shadow-xl flex items-center gap-1.5 transition-all duration-500">
-                    <span class="text-sm">🖐️</span>
-                    <span>ใช้ 2 นิ้วหนีบ/กางซูม • 1 นิ้วเลื่อนดู • แตะ 2 ครั้งขยาย</span>
+                <!-- Floating Gesture Hint (Disappears after 3.5s or on first interaction) -->
+                <div id="pdf-gesture-hint" class="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-neutral-900/90 backdrop-blur-md border border-neutral-700/80 text-white text-[11px] font-medium shadow-xl flex items-center gap-1.5 transition-all duration-500">
+                    <span class="text-sm">📜</span>
+                    <span>เลื่อนดูเอกสารขึ้น-ลงได้ตามปกติ • กด ➕ เพื่อซูมขยาย</span>
                 </div>
 
-                <!-- Floating Quick Zoom Toolbar -->
-                <div class="absolute bottom-3 right-3 z-30 flex items-center gap-1 bg-neutral-900/90 backdrop-blur-md p-1 rounded-2xl border border-neutral-700/80 shadow-2xl">
+                <!-- Floating Quick Zoom Toolbar (Placed at TOP-RIGHT so it never overlaps Google Drive's bottom bar) -->
+                <div class="absolute top-3 right-3 z-30 flex items-center gap-1 bg-neutral-900/90 backdrop-blur-md p-1 rounded-2xl border border-neutral-700/80 shadow-2xl">
                     <button type="button" onclick="zoomQuotationPdf(-0.35)" class="w-8 h-8 rounded-xl bg-neutral-800/90 hover:bg-neutral-700 active:scale-90 text-neutral-200 flex items-center justify-center font-bold text-sm transition-all cursor-pointer" title="ซูมออก (-35%)">
                         ➖
                     </button>
@@ -849,9 +849,9 @@
                 <div class="flex items-center gap-2">
                     <span id="pdf-modal-filesize" class="font-mono text-[11px] text-neutral-400">-</span>
                     <!-- Touch / Drive Mode Switcher -->
-                    <button type="button" id="pdf-mode-toggle-btn" onclick="togglePdfTouchMode()" class="px-2 py-0.5 rounded-lg bg-neutral-800/90 text-[10px] text-indigo-300 border border-neutral-700 hover:bg-neutral-700 active:scale-95 transition-all cursor-pointer flex items-center gap-1" title="สลับระหว่างโหมดซูมด้วยนิ้ว และโหมดแตะตรงเอกสาร">
-                        <span id="pdf-mode-icon">🖐️</span>
-                        <span id="pdf-mode-text">โหมดซูมอิสระ</span>
+                    <button type="button" id="pdf-mode-toggle-btn" onclick="togglePdfTouchMode()" class="px-2.5 py-1 rounded-lg bg-neutral-800 text-[11px] text-indigo-300 border border-neutral-700 hover:bg-neutral-700 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5" title="สลับระหว่างโหมดเลื่อนอ่านเอกสาร และโหมดซูมอิสระ">
+                        <span id="pdf-mode-icon">📜</span>
+                        <span id="pdf-mode-text">โหมดเลื่อนอ่าน</span>
                     </button>
                 </div>
                 <button type="button" onclick="closeQuotationPdfModal()" class="px-4 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-xl font-bold text-xs transition-all active:scale-95 cursor-pointer">
@@ -957,6 +957,6 @@
     </nav>
 
     <!-- Application Script -->
-    <script src="app.js?v=1.3.2"></script>
+    <script src="app.js?v=1.3.3"></script>
 </body>
 </html>
