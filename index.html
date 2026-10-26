@@ -2,7 +2,7 @@
 <html lang="th" class="dark h-full bg-black">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
     <title>WKT S/N Scanner - เช็คสต็อก</title>
     
     <!-- PWA & Apple iOS Standalone Meta Tags -->
@@ -66,6 +66,7 @@
             -webkit-tap-highlight-color: transparent;
             user-select: none;
             -webkit-user-select: none;
+            touch-action: pan-x pan-y pinch-zoom;
         }
         .pt-safe { padding-top: max(0.75rem, var(--sat)); }
         .pb-safe { padding-bottom: max(0.75rem, var(--sab)); }
@@ -814,7 +815,7 @@
                 </div>
 
                 <!-- 📜 Unified Canvas Pages Scroll Container (Native 60fps Momentum Scrolling & Pinch Zoom) -->
-                <div id="pdf-scroll-container" class="w-full h-full overflow-y-auto overflow-x-auto p-3 select-none" style="-webkit-overflow-scrolling: touch; touch-action: pan-x pan-y;">
+                <div id="pdf-scroll-container" class="w-full h-full overflow-y-auto overflow-x-auto p-3 select-none" style="-webkit-overflow-scrolling: touch; touch-action: pan-x pan-y pinch-zoom;">
                     <div id="pdf-pages-stage" class="mx-auto flex flex-col items-center space-y-4 shrink-0 transition-[width] duration-150" style="width: 100%; min-width: 100%;">
                         <!-- Canvas pages rendered dynamically by PDF.js -->
                     </div>
@@ -958,6 +959,6 @@
     <!-- PDF.js library for Canvas PDF rendering (Simultaneous 1-finger scroll & 2-finger pinch in the same mode) -->
     <script src="pdf.min.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.3.6"></script>
+    <script src="app.js?v=1.3.7"></script>
 </body>
 </html>

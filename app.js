@@ -3455,6 +3455,16 @@ window.applyUnifiedPdfZoom = function(targetScale, animated = true) {
         stage.style.width = `${targetW}px`;
         stage.style.minWidth = `${targetW}px`;
         stage.style.maxWidth = `${targetW}px`;
+
+        if (pdfUnifiedScale > 1.0) {
+            stage.classList.remove('mx-auto');
+            stage.style.marginLeft = '0px';
+            stage.style.marginRight = '0px';
+        } else {
+            stage.classList.add('mx-auto');
+            stage.style.marginLeft = 'auto';
+            stage.style.marginRight = 'auto';
+        }
     }
 
     // กรณีสำรองที่เปิดผ่าน iframe ให้ซูม iframe ได้ด้วย
@@ -3498,90 +3508,118 @@ function handlePdfDoubleTap(clientX, clientY) {
 
 // 🖐️ Unified Gesture Handler: 1 นิ้วเลื่อนอ่านได้อย่างอิสระ 60fps / 2 นิ้วกางหุบซูมได้ในโหมดเดียวกันทันที
 function initUnifiedPdfGestures() {
+    const modal = document.getElementById('modal-pdf-viewer');
     const container = document.getElementById('pdf-scroll-container');
     if (!container || isPdfGesturesBound) return;
     isPdfGesturesBound = true;
 
+    const isModalOpen = () => modal && !modal.classList.contains('hidden');
+
     // 1. iOS Safari Hardware Pinch Events (iPhone / iPad)
-    container.addEventListener('gesturestart', (e) => {
+    const onGestureStart = (e) => {
+        if (!isModalOpen()) return;
         e.preventDefault();
         hidePdfHint();
         isPinchingPdf = true;
         pinchStartScale = pdfUnifiedScale;
-    }, { passive: false });
+    };
 
-    container.addEventListener('gesturechange', (e) => {
+    const onGestureChange = (e) => {
+        if (!isModalOpen() || !isPinchingPdf) return;
         e.preventDefault();
-        if (isPinchingPdf) {
-            const newScale = Math.min(Math.max(pinchStartScale * e.scale, PDF_MIN_SCALE), PDF_MAX_SCALE);
-            applyUnifiedPdfZoom(newScale, false);
-        }
-    }, { passive: false });
+        const scaleVal = typeof e.scale === 'number' ? e.scale : 1.0;
+        const newScale = Math.min(Math.max(pinchStartScale * scaleVal, PDF_MIN_SCALE), PDF_MAX_SCALE);
+        applyUnifiedPdfZoom(newScale, false);
+    };
 
-    container.addEventListener('gestureend', (e) => {
+    const onGestureEnd = (e) => {
+        if (!isModalOpen()) return;
         e.preventDefault();
         isPinchingPdf = false;
         let finalScale = Math.min(Math.max(pdfUnifiedScale, PDF_MIN_SCALE), PDF_MAX_SCALE);
         if (finalScale < 1.05) finalScale = 1.0;
         applyUnifiedPdfZoom(finalScale, true);
-    }, { passive: false });
+    };
 
-    // 2. Standard Touch Events (Android Chrome, Desktop Touch, Cross-browser)
-    container.addEventListener('touchstart', (e) => {
-        hidePdfHint();
+    if (modal) {
+        modal.addEventListener('gesturestart', onGestureStart, { passive: false });
+        modal.addEventListener('gesturechange', onGestureChange, { passive: false });
+        modal.addEventListener('gestureend', onGestureEnd, { passive: false });
+    }
+    container.addEventListener('gesturestart', onGestureStart, { passive: false });
+    container.addEventListener('gesturechange', onGestureChange, { passive: false });
+    container.addEventListener('gestureend', onGestureEnd, { passive: false });
 
-        if (e.touches.length === 1) {
-            // 1 นิ้ว: ปล่อยให้ Native Browser Momentum Scrolling ทำงานเต็มประสิทธิภาพ (ไม่ preventDefault)
-            const t = e.touches[0];
-            const now = Date.now();
-            const dist = Math.hypot(t.clientX - lastPdfTapX, t.clientY - lastPdfTapY);
+    // 2. Standard Touch Events (Android Chrome, iOS Safari, Cross-browser)
+    window.addEventListener('touchstart', (e) => {
+        if (!isModalOpen()) return;
 
-            if (now - lastPdfTapTime < 320 && dist < 35) {
-                e.preventDefault();
-                lastPdfTapTime = 0;
-                handlePdfDoubleTap(t.clientX, t.clientY);
-                return;
-            }
-            lastPdfTapTime = now;
-            lastPdfTapX = t.clientX;
-            lastPdfTapY = t.clientY;
-        } else if (e.touches.length === 2) {
-            // 2 นิ้ว: Pinch-to-zoom แบบเรียลไทม์
+        if (e.touches && e.touches.length >= 2) {
             e.preventDefault();
+            hidePdfHint();
             isPinchingPdf = true;
             const t1 = e.touches[0];
             const t2 = e.touches[1];
             pinchStartDistance = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
             pinchStartScale = pdfUnifiedScale;
+        } else if (e.touches && e.touches.length === 1) {
+            const t = e.touches[0];
+            if (container.contains(e.target) || (modal && modal.contains(e.target))) {
+                const now = Date.now();
+                const dist = Math.hypot(t.clientX - lastPdfTapX, t.clientY - lastPdfTapY);
+
+                if (now - lastPdfTapTime < 320 && dist < 35) {
+                    e.preventDefault();
+                    lastPdfTapTime = 0;
+                    handlePdfDoubleTap(t.clientX, t.clientY);
+                    return;
+                }
+                lastPdfTapTime = now;
+                lastPdfTapX = t.clientX;
+                lastPdfTapY = t.clientY;
+            }
         }
     }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
-        if (isPinchingPdf && e.touches.length === 2) {
+        if (!isModalOpen()) return;
+
+        // ถ้ามี 2 นิ้วขึ้นไปบนหน้าจอ: ทำการ Pinch-to-zoom เสมอ
+        if (e.touches && e.touches.length >= 2) {
             e.preventDefault();
+            hidePdfHint();
+
             const t1 = e.touches[0];
             const t2 = e.touches[1];
             const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-            if (pinchStartDistance <= 0) return;
+
+            if (!isPinchingPdf || pinchStartDistance <= 10) {
+                isPinchingPdf = true;
+                pinchStartDistance = dist;
+                pinchStartScale = pdfUnifiedScale;
+                return;
+            }
 
             const factor = dist / pinchStartDistance;
             const newScale = Math.min(Math.max(pinchStartScale * factor, 0.85), PDF_MAX_SCALE * 1.15);
             applyUnifiedPdfZoom(newScale, false);
         }
-        // เมื่อเป็น 1 นิ้ว ปล่อยให้เลื่อนหน้าจอตามปกติ ไม่ขัดจังหวะ momentum scroll
     }, { passive: false });
 
     const endTouch = (e) => {
-        if (isPinchingPdf && e.touches.length < 2) {
+        if (!isModalOpen()) return;
+
+        if (isPinchingPdf && (!e.touches || e.touches.length < 2)) {
             isPinchingPdf = false;
+            pinchStartDistance = 0;
             let finalScale = Math.min(Math.max(pdfUnifiedScale, PDF_MIN_SCALE), PDF_MAX_SCALE);
             if (finalScale < 1.05) finalScale = 1.0;
             applyUnifiedPdfZoom(finalScale, true);
         }
     };
 
-    window.addEventListener('touchend', endTouch);
-    window.addEventListener('touchcancel', endTouch);
+    window.addEventListener('touchend', endTouch, { passive: false });
+    window.addEventListener('touchcancel', endTouch, { passive: false });
 
     // Trackpad Pinch / Mouse Wheel with Ctrl (Mac / PC / iPad Trackpad)
     container.addEventListener('wheel', (e) => {
