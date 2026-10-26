@@ -101,6 +101,25 @@
             transform: scale(1.02);
         }
 
+        /* Error / Not Found Hit Flash (แจ้งเตือนเมื่อไม่ใช่ S/N ในระบบ) */
+        .reticle-error-hit {
+            border-color: #ef4444 !important;
+            background-color: rgba(239, 68, 68, 0.35) !important;
+            box-shadow: 0 0 35px rgba(239, 68, 68, 0.95), 0 0 0 9999px rgba(0, 0, 0, 0.6) !important;
+            animation: reticleShake 0.4s ease-in-out !important;
+        }
+        @keyframes reticleShake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-8px); }
+            40% { transform: translateX(8px); }
+            60% { transform: translateX(-6px); }
+            80% { transform: translateX(6px); }
+        }
+        .scanner-laser-error {
+            background: linear-gradient(90deg, transparent, #ef4444 20%, #f87171 50%, #ef4444 80%, transparent) !important;
+            box-shadow: 0 0 18px #ef4444, 0 0 6px #fca5a5 !important;
+        }
+
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -230,6 +249,24 @@
                 <div id="scanner-viewfinder-box" onclick="wakeUpCameraIfPaused()" class="w-full bg-neutral-950 rounded-3xl overflow-hidden relative aspect-[4/3] flex flex-col justify-center items-center shadow-2xl border border-neutral-800 select-none transition-all cursor-pointer">
                     <!-- Live Camera Video -->
                     <video id="scanner-video" playsinline webkit-playsinline autoplay muted class="w-full h-full object-cover transition-transform duration-200"></video>
+
+                    <!-- ❌ Alert Banner เมื่อสแกนไม่พบ S/N (แจ้งเตือนที่หน้าจอว่าไม่ใช่) -->
+                    <div id="scanner-not-found-banner" class="hidden absolute top-3 inset-x-3 z-50 p-3 rounded-2xl bg-gradient-to-r from-rose-950/95 via-red-900/95 to-rose-950/95 border-2 border-rose-500 text-white shadow-2xl backdrop-blur-md flex items-center justify-between gap-2.5">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <div class="w-9 h-9 rounded-xl bg-rose-500/30 border border-rose-400 flex items-center justify-center text-xl shrink-0">
+                                ❌
+                            </div>
+                            <div class="min-w-0">
+                                <div class="text-xs sm:text-sm font-black text-rose-200">ไม่ใช่! ไม่พบ S/N นี้ในระบบ</div>
+                                <div class="text-[11px] text-white/90 truncate font-mono mt-0.5">
+                                    S/N: <span id="scanner-not-found-sn" class="text-amber-300 font-bold">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" onclick="event.stopPropagation(); dismissScannerNotFoundBanner();" class="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-bold cursor-pointer shrink-0">
+                            ปิด
+                        </button>
+                    </div>
 
                     <!-- Scanning Reticle Frame (ขอบมนตัดฉากหลังโปร่งแสงสไตล์ Apple Support) -->
                     <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
@@ -493,6 +530,26 @@
                     <span>❮</span> <span>สแกนเครื่องถัดไป</span>
                 </button>
                 <span id="result-source-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-800 text-neutral-300 border border-neutral-700">Stock Rent</span>
+            </div>
+
+            <!-- ❌ Banner แจ้งเตือนเมื่อไม่พบข้อมูล S/N ในระบบ (ไม่ใช่) -->
+            <div id="result-not-found-alert" class="hidden mt-3 p-4 rounded-3xl bg-gradient-to-r from-rose-950/95 via-red-900/95 to-rose-950/95 border-2 border-rose-500 text-white shadow-2xl flex flex-col gap-2.5">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-rose-500/30 border border-rose-400 flex items-center justify-center text-2xl shrink-0">
+                        ❌
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-base font-black text-rose-200">ไม่ใช่! ไม่พบข้อมูล S/N นี้ในระบบ</div>
+                        <div class="text-xs text-rose-300/90 mt-0.5">
+                            หมายเลข <span id="result-not-found-sn-text" class="font-mono font-bold text-amber-300">-</span> ไม่มีในฐานข้อมูลชีต Stock Rent / Stock New
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 pt-1 border-t border-rose-500/30">
+                    <button type="button" onclick="switchMainTab('scanner')" class="flex-1 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                        <span>📷</span> <span>สแกนเครื่องถัดไป</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Result Card (Apple Device Inspector Style) -->
@@ -959,6 +1016,6 @@
     <!-- PDF.js library for Canvas PDF rendering (Simultaneous 1-finger scroll & 2-finger pinch in the same mode) -->
     <script src="pdf.min.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.3.7"></script>
+    <script src="app.js?v=1.3.8"></script>
 </body>
 </html>

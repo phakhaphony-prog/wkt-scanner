@@ -1567,10 +1567,30 @@ function handleDetectedBarcode(raw) {
     const cleanSn = sanitizeBarcodeSerial(raw);
     if (!cleanSn) return false;
 
-    // 🛡️ System Whitelist Gating: ต้องมี S/N ในระบบชีตเท่านั้น จึงจะเริ่มทำงาน
+    // 🛡️ System Whitelist Gating: ตรวจสอบ S/N กับฐานข้อมูลระบบ
     const matchedSn = findSystemMatchingSn(cleanSn);
     if (!matchedSn) {
-        return false;
+        // ❌ ไม่พบ S/N นี้ในระบบ: ส่งเสียงเตือน + สั่น + แสดงแจ้งเตือนบนหน้าจอว่า "ไม่ใช่"
+        const now = Date.now();
+        const cooldownMs = cameraScanMode === 'single' ? 1800 : 2000;
+        if (cleanSn === lastScannedCode && (now - lastScannedTime) < cooldownMs) {
+            return false;
+        }
+        lastScannedCode = cleanSn;
+        lastScannedTime = now;
+
+        saveRecentScan(cleanSn);
+        showScannerNotFoundAlert(cleanSn);
+
+        // หากเปิดโหมดยิงต่อเนื่อง: บันทึกลงรายการแบบสีแดงชัดเจนว่า "ไม่ใช่ / ไม่พบ"
+        if (cameraScanMode === 'continuous') {
+            handleContinuousGunScannedBarcode(cleanSn, true /* isForceNotFound */);
+            return true;
+        }
+
+        // โหมด Single: ดึงข้อมูล Live API หรือเปิดหน้า Result ที่แจ้งเตือนว่า "ไม่ใช่"
+        lookupDeviceBySn(cleanSn);
+        return true;
     }
     const targetSn = matchedSn;
 
@@ -1599,7 +1619,8 @@ function handleDetectedBarcode(raw) {
     const pillText = document.getElementById('reticle-ocr-text');
     if (pill && pillText) {
         pillText.textContent = `🎯 ${targetSn}`;
-        pill.classList.remove('opacity-0');
+        pill.classList.remove('opacity-0', 'bg-rose-600/95', 'border-rose-400/60');
+        pill.classList.add('bg-emerald-600/90', 'border-emerald-400/40');
         setTimeout(() => {
             if (pill && cameraScanMode === 'continuous') pill.classList.add('opacity-0');
         }, 1500);
@@ -1629,7 +1650,24 @@ function handleDetectedOcrSerial(cleanSn) {
     // 🛡️ System Whitelist Gating: ต้องมี S/N ในระบบชีตเท่านั้น จึงจะเริ่มทำงาน
     const matchedSn = findSystemMatchingSn(cleanSn);
     if (!matchedSn) {
-        return false;
+        const now = Date.now();
+        const cooldownMs = 2200;
+        if (cleanSn === lastScannedCode && (now - lastScannedTime) < cooldownMs) {
+            return false;
+        }
+        lastScannedCode = cleanSn;
+        lastScannedTime = now;
+
+        saveRecentScan(cleanSn);
+        showScannerNotFoundAlert(cleanSn);
+
+        if (cameraScanMode === 'continuous') {
+            handleContinuousGunScannedBarcode(cleanSn, true /* isForceNotFound */);
+            return true;
+        }
+
+        lookupDeviceBySn(cleanSn);
+        return true;
     }
     const targetSn = matchedSn;
 
@@ -1654,7 +1692,8 @@ function handleDetectedOcrSerial(cleanSn) {
     const pillText = document.getElementById('reticle-ocr-text');
     if (pill && pillText) {
         pillText.textContent = `🎯 ${targetSn}`;
-        pill.classList.remove('opacity-0');
+        pill.classList.remove('opacity-0', 'bg-rose-600/95', 'border-rose-400/60');
+        pill.classList.add('bg-emerald-600/90', 'border-emerald-400/40');
         setTimeout(() => {
             if (pill && cameraScanMode === 'continuous') pill.classList.add('opacity-0');
         }, 1500);
@@ -1717,6 +1756,117 @@ function playBeepSound() {
         osc.stop(ctx.currentTime + 0.08);
     } catch(e) {}
 }
+
+/**
+ * 🔊 เสียงเตือนเมื่อสแกนไม่พบ S/N หรือไม่ใช่เครื่องในระบบ (Low Error Buzzer)
+ */
+function playErrorBuzzer() {
+    try {
+        if (!beepAudioCtx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) beepAudioCtx = new AudioContext();
+        }
+        if (!beepAudioCtx) return;
+        if (beepAudioCtx.state === 'suspended') beepAudioCtx.resume();
+
+        const ctx = beepAudioCtx;
+        const now = ctx.currentTime;
+
+        // โทนเสียงเตือนผิดพลาด 2 จังหวะต่ำ (Sawtooth 220Hz -> 140Hz)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(220, now);
+        osc1.frequency.exponentialRampToValueAtTime(140, now + 0.12);
+        gain1.gain.setValueAtTime(0.35, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.12);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sawtooth';
+        osc2.frequency.setValueAtTime(200, now + 0.15);
+        osc2.frequency.exponentialRampToValueAtTime(120, now + 0.30);
+        gain2.gain.setValueAtTime(0.35, now + 0.15);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(now + 0.15);
+        osc2.stop(now + 0.30);
+    } catch(e) {}
+}
+
+/**
+ * 🔴 แอนิเมชันกรอบเล็งวาบสีแดงเมื่อสแกนไม่พบ S/N ในระบบ
+ */
+function triggerReticleErrorFlash() {
+    const reticle = document.getElementById('scanner-reticle');
+    const laser = document.getElementById('scanner-laser');
+    if (reticle) {
+        reticle.classList.remove('reticle-hit');
+        reticle.classList.add('reticle-error-hit');
+        setTimeout(() => reticle.classList.remove('reticle-error-hit'), 500);
+    }
+    if (laser) {
+        laser.classList.add('scanner-laser-error');
+        setTimeout(() => laser.classList.remove('scanner-laser-error'), 500);
+    }
+}
+
+let scannerNotFoundBannerTimer = null;
+
+/**
+ * ❌ แสดงการแจ้งเตือนเด่นชัดที่หน้าจอกล้อง เมื่อสแกนไม่พบ S/N ("ไม่ใช่")
+ */
+function showScannerNotFoundAlert(sn) {
+    // 🔊 เสียงเตือน "ไม่ใช่" (Error Buzzer)
+    playErrorBuzzer();
+
+    // 📳 สั่นเตือนผิดพลาด (Double Strong Vibration)
+    if (navigator.vibrate) {
+        try { navigator.vibrate([150, 70, 150]); } catch(e) {}
+    }
+
+    // 🔴 กรอบเล็งวาบสีแดงสั่นเตือน
+    triggerReticleErrorFlash();
+
+    // 🔴 แสดงป้าย Live Pill ลอยใต้กรอบเล็งสีแดง
+    const pill = document.getElementById('reticle-ocr-pill');
+    const pillText = document.getElementById('reticle-ocr-text');
+    if (pill && pillText) {
+        pillText.textContent = `❌ ไม่ใช่: ${sn}`;
+        pill.classList.remove('opacity-0', 'bg-emerald-600/90', 'border-emerald-400/40');
+        pill.classList.add('bg-rose-600/95', 'border-rose-400/60');
+        setTimeout(() => {
+            if (pill) {
+                pill.classList.remove('bg-rose-600/95', 'border-rose-400/60');
+                pill.classList.add('bg-emerald-600/90', 'border-emerald-400/40');
+                if (cameraScanMode === 'continuous') pill.classList.add('opacity-0');
+            }
+        }, 2200);
+    }
+
+    // 📢 แสดงแบนเนอร์แจ้งเตือน "ไม่ใช่" ที่ด้านบนจอกล้อง
+    const banner = document.getElementById('scanner-not-found-banner');
+    const bannerSn = document.getElementById('scanner-not-found-sn');
+    if (banner && bannerSn) {
+        bannerSn.textContent = sn;
+        banner.classList.remove('hidden');
+        if (scannerNotFoundBannerTimer) clearTimeout(scannerNotFoundBannerTimer);
+        scannerNotFoundBannerTimer = setTimeout(() => {
+            banner.classList.add('hidden');
+        }, 3500);
+    }
+}
+
+window.dismissScannerNotFoundBanner = function() {
+    const banner = document.getElementById('scanner-not-found-banner');
+    if (banner) banner.classList.add('hidden');
+    if (scannerNotFoundBannerTimer) clearTimeout(scannerNotFoundBannerTimer);
+};
 
 // =========================================================================
 // 📸 Photo Capture & File Decoder (100% Accuracy with Quiet Zone)
@@ -2135,9 +2285,9 @@ function createScannedItemCardHtml(item, index, isDupInInput) {
         icon = '⏳';
         statusBadge = '<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-neutral-800 text-neutral-300 border border-neutral-700 animate-pulse">กำลังดึงข้อมูล...</span>';
     } else if (item.notFound) {
-        cardBg = 'bg-rose-950/20 border-rose-500/40 text-rose-200';
+        cardBg = 'bg-rose-950/25 border-rose-500/50 text-rose-200';
         icon = '❌';
-        statusBadge = '<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/30">ไม่พบในระบบชีต</span>';
+        statusBadge = '<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-500/25 text-rose-300 border border-rose-500/40">❌ ไม่ใช่ / ไม่พบในระบบ</span>';
     } else if (isSold) {
         // 🏷️ เครื่องที่ตัดขายไปแล้ว (Sell) แสดงป้ายสีแดง/โรสชัดเจน
         cardBg = 'bg-rose-950/25 border-rose-500/50 text-rose-200';
@@ -2253,10 +2403,10 @@ async function lookupBatchSns(snList, onUpdateCallback) {
                     saveAssetToCache(item);
                 }
             });
-            // เครื่องที่ชีตหาไม่พบ ให้จำว่า Not Found
+            // เครื่องที่ชีตหาไม่พบ ให้จำว่า Not Found (ไม่ใช่ในระบบ)
             stillMissing.forEach(s => {
                 if (!localSnDetailCache.has(s)) {
-                    localSnDetailCache.set(s, { sn: s, notFound: true, model: '-', company: '-', quotation: 'ไม่มี', status: 'Not Found' });
+                    localSnDetailCache.set(s, { sn: s, notFound: true, model: '❌ ไม่ใช่ (ไม่พบในชีต)', company: 'ไม่มีในระบบ', quotation: 'ไม่มี', status: '❌ ไม่ใช่ / ไม่พบ', stock: 'ไม่พบในระบบ' });
                 }
             });
         } else {
@@ -2274,7 +2424,7 @@ async function lookupBatchSns(snList, onUpdateCallback) {
                         localSnDetailCache.set(s, d.item);
                         saveAssetToCache(d.item);
                     } else {
-                        localSnDetailCache.set(s, { sn: s, notFound: true, model: '-', company: '-', quotation: 'ไม่มี', status: 'Not Found' });
+                        localSnDetailCache.set(s, { sn: s, notFound: true, model: '❌ ไม่ใช่ (ไม่พบในชีต)', company: 'ไม่มีในระบบ', quotation: 'ไม่มี', status: '❌ ไม่ใช่ / ไม่พบ', stock: 'ไม่พบในระบบ' });
                     }
                 } catch(e) {}
             }
@@ -2341,7 +2491,7 @@ window.switchCameraScanMode = function(mode) {
     }
 };
 
-async function handleContinuousGunScannedBarcode(cleanSn) {
+async function handleContinuousGunScannedBarcode(cleanSn, isForceNotFound) {
     // ป้องกันการยิงซ้ำ S/N เดิมในชุดนี้
     const isAlreadyScanned = continuousGunList.some(item => item.sn === cleanSn);
     if (isAlreadyScanned) {
@@ -2350,6 +2500,21 @@ async function handleContinuousGunScannedBarcode(cleanSn) {
             try { navigator.vibrate([100, 50, 100]); } catch(e) {}
         }
         showReticlePill('⚠️ ยิงซ้ำในชุดนี้แล้ว: ' + cleanSn);
+        return;
+    }
+
+    if (isForceNotFound) {
+        showReticlePill('❌ ไม่ใช่: ' + cleanSn);
+        continuousGunList.unshift({
+            sn: cleanSn,
+            model: '❌ ไม่ใช่! ไม่พบข้อมูลเครื่องในชีต',
+            company: 'ไม่มีในระบบ',
+            quotation: '-',
+            status: 'ไม่ใช่ / ไม่พบ',
+            stock: 'ไม่พบในระบบ',
+            notFound: true
+        });
+        renderContinuousGunFeed();
         return;
     }
 
@@ -2806,6 +2971,9 @@ function renderResultLoading(sn) {
     const cardComp = document.getElementById('card-comp');
     const cardPeriod = document.getElementById('card-period');
 
+    const notFoundAlert = document.getElementById('result-not-found-alert');
+    if (notFoundAlert) notFoundAlert.classList.add('hidden');
+
     if (cardSn) cardSn.textContent = sn;
     if (cardModel) cardModel.textContent = "กำลังค้นหาข้อมูลใน Google Sheets...";
     if (cardComp) cardComp.textContent = "⏳ กำลังดึงข้อมูล...";
@@ -2814,6 +2982,9 @@ function renderResultLoading(sn) {
 
 function renderAssetResultCard(item) {
     currentAssetItem = item;
+
+    const notFoundAlert = document.getElementById('result-not-found-alert');
+    if (notFoundAlert) notFoundAlert.classList.add('hidden');
 
     const sn = item.sn || '-';
     const model = item.model || 'ไม่ระบุชื่อรุ่น';
@@ -3081,9 +3252,9 @@ function renderApiConnectionError(sn, err) {
 
 function renderAssetNotFound(sn, customMessage) {
     document.getElementById('card-sn').textContent = sn;
-    document.getElementById('card-model').textContent = "ไม่พบข้อมูลเครื่องในชีต";
-    document.getElementById('card-brand').textContent = "NEW / UNKNOWN";
-    document.getElementById('card-comp').textContent = "ยังไม่มีประวัติในระบบ";
+    document.getElementById('card-model').textContent = "❌ ไม่ใช่! ไม่พบข้อมูลเครื่องในชีต";
+    document.getElementById('card-brand').textContent = "NOT FOUND / UNKNOWN";
+    document.getElementById('card-comp').textContent = "ไม่มีประวัติในระบบ";
     document.getElementById('card-spec').textContent = customMessage || "ไม่พบประวัติ S/N นี้ในชีต Stock Rent / Stock New";
     document.getElementById('card-period').textContent = "-";
     document.getElementById('card-days-left').textContent = "";
@@ -3093,8 +3264,28 @@ function renderAssetNotFound(sn, customMessage) {
 
     const statusBadge = document.getElementById('card-status-badge');
     if (statusBadge) {
-        statusBadge.textContent = "ไม่พบในระบบ";
-        statusBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-neutral-800 text-neutral-400 border border-neutral-700";
+        statusBadge.textContent = "❌ ไม่ใช่ / ไม่พบ";
+        statusBadge.className = "px-3 py-1 rounded-full text-xs font-black bg-rose-500/20 text-rose-400 border border-rose-500/50 shadow-sm";
+    }
+
+    const sourceBadge = document.getElementById('result-source-badge');
+    if (sourceBadge) {
+        sourceBadge.textContent = "ไม่พบในระบบ";
+        sourceBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800";
+    }
+
+    // 📢 แสดงแบนเนอร์แจ้งเตือน "ไม่ใช่" ชัดเจนที่หน้าจอ
+    const alertBox = document.getElementById('result-not-found-alert');
+    const alertSnText = document.getElementById('result-not-found-sn-text');
+    if (alertBox && alertSnText) {
+        alertSnText.textContent = sn;
+        alertBox.classList.remove('hidden');
+    }
+
+    // 🔊 เสียง Buzzer ผิดพลาด + สั่นเตือน
+    playErrorBuzzer();
+    if (navigator.vibrate) {
+        try { navigator.vibrate([150, 70, 150]); } catch(e) {}
     }
 }
 
