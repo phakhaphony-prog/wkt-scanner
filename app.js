@@ -495,6 +495,22 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
+let secretAdminTapCount = 0;
+let secretAdminTapTimer = null;
+window.handleSecretAdminPinTrigger = function() {
+    secretAdminTapCount++;
+    if (secretAdminTapTimer) clearTimeout(secretAdminTapTimer);
+    secretAdminTapTimer = setTimeout(() => {
+        secretAdminTapCount = 0;
+    }, 2500);
+
+    // แตะติดกัน 5 ครั้งภายใน 2.5 วินาที เพื่อเปิดหน้าต่างเปลี่ยนรหัส PIN (สำหรับแอดมินคนเดียว)
+    if (secretAdminTapCount >= 5) {
+        secretAdminTapCount = 0;
+        window.changePinCode();
+    }
+};
+
 window.changePinCode = async function() {
     const masterHash = getMasterPinHash();
     const oldInput = prompt('กรุณากรอกรหัส PIN เดิมปัจจุบัน:');
