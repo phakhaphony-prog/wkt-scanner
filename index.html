@@ -231,10 +231,10 @@
         <!-- ========================================== -->
         <!-- VIEW 1: สแกนเนอร์กล้องสด สไตล์ Apple iOS    -->
         <!-- ========================================== -->
-        <section id="tab-scanner" class="flex-1 flex flex-col px-4 pt-6 pb-4">
+        <section id="tab-scanner" class="flex-1 flex flex-col px-4 pt-12 sm:pt-14 pb-5">
             
             <!-- Scanner Mode: CAMERA -->
-            <div id="scanner-view-camera" class="flex flex-col flex-1 pt-1">
+            <div id="scanner-view-camera" class="flex flex-col flex-1 pt-3 sm:pt-4">
                 <!-- Camera Submode Switcher: Single vs Continuous Gun -->
                 <div class="flex bg-neutral-900 p-1.5 rounded-2xl border border-neutral-800 text-xs font-bold mb-4 select-none">
                     <button type="button" id="cam-sub-single" onclick="switchCameraScanMode('single')" class="flex-1 py-2 rounded-xl bg-blue-600 text-white transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm">
@@ -1016,6 +1016,6 @@
     <!-- PDF.js library for Canvas PDF rendering (Simultaneous 1-finger scroll & 2-finger pinch in the same mode) -->
     <script src="pdf.min.js"></script>
     <!-- Application Script -->
-    <script src="app.js?v=1.3.9"></script>
+    <script src="app.js?v=1.3.10"></script>
 </body>
 </html>
