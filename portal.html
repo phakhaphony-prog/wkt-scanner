@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบตรวจสอบทรัพย์สินเครื่องเช่า - Welkin Touch</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Premium Fonts: Prompt (ไทยคมชัด ทันสมัย) + Inter + JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      font-family: 'Prompt', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .font-mono, .sn-font {
+      font-family: 'JetBrains Mono', 'Inter', monospace !important;
+      letter-spacing: 0.02em;
+    }
+    body {
+      background-color: #f8fafc;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.04) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.04) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(203, 213, 225, 0.15) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: #0f172a;
+      min-height: 100vh;
+      position: relative;
+    }
+
+    /* 💎 Ultra-lightweight Crisp Card System (Fast 60fps on all computers) */
+    .glass-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+    }
+    .glass-card-interactive {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.06);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .glass-card-interactive:hover {
+      border-color: #cbd5e1;
+      box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+    }
+
+    /* Custom Scrollbar */
+    .custom-scrollbar::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff !important; font-size: 11px; }
+      .print-border { border: 1px solid #cbd5e1 !important; box-shadow: none !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-600 selection:text-white">
+
+  <!-- 🌟 Top Navbar with Subtle Glowing Accent Line -->
+  <header class="bg-slate-950 text-white shadow-md sticky top-0 z-40 border-b border-slate-800">
+    <div class="w-full max-w-[98%] mx-auto px-2 sm:px-4 lg:px-6 py-3 flex flex-wrap justify-between items-center gap-3">
+      
+      <!-- Brand Logo & Title -->
+      <div class="flex items-center space-x-3.5">
+        <div class="h-10 sm:h-12 flex items-center justify-center shrink-0">
+          <img src="data:image/png;base64,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" alt="Welkin Touch Logo" class="h-full w-auto object-contain drop-shadow-[0_2px_8px_rgba(245,158,11,0.35)]">
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-base sm:text-lg font-extrabold tracking-tight text-white drop-shadow-sm">WELKIN TOUCH</span>
+            <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-gradient-to-r from-indigo-500/30 via-purple-500/30 to-violet-500/30 text-indigo-200 border border-indigo-400/30 shadow-xs tracking-wider">
+              CLIENT PORTAL
+            </span>
+          </div>
+          <p class="text-xs text-slate-300 font-light">ระบบตรวจสอบทรัพย์สินและสัญญาเครื่องเช่าองค์กร</p>
+        </div>
+      </div>
+
+      <!-- Customer Badge Pill -->
+      <div class="flex items-center gap-2.5 bg-slate-900 px-4 py-2 rounded-2xl border border-slate-800 text-xs sm:text-sm shadow-inner">
+        <span class="flex h-2.5 w-2.5 relative">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-80"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+        </span>
+        <span class="text-slate-300 text-xs font-normal">ลูกค้าองค์กร:</span>
+        <span class="font-extrabold text-white tracking-wide text-sm drop-shadow-xs" id="nav-company-name">กำลังโหลดข้อมูล...</span>
+      </div>
+
+    </div>
+    <!-- Under-navbar glowing accent line -->
+    <div class="h-[1.5px] w-full bg-gradient-to-r from-transparent via-indigo-500 via-purple-500 to-transparent opacity-80"></div>
+  </header>
+
+  <!-- 📦 Main Container -->
+  
+  <!-- ⏳ Loading Overlay for GitHub Pages -->
+  <div id="portal-loading-screen" class="fixed inset-0 bg-slate-900/90 z-50 flex flex-col items-center justify-center text-white space-y-4">
+    <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+    <div class="text-center space-y-1">
+      <h3 class="text-sm sm:text-base font-bold tracking-tight">กำลังโหลดข้อมูลทรัพย์สินเครื่องเช่า...</h3>
+      <p class="text-xs text-slate-400 font-normal">ระบบตรวจสอบสิทธิ์และดึงสัญญาเช่าแบบเรียลไทม์</p>
+    </div>
+  </div>
+
+  <main class="flex-1 w-full max-w-[98%] mx-auto px-2 sm:px-4 lg:px-6 py-5 sm:py-7 space-y-5">
+
+    <!-- 🏷️ Header Hero Banner -->
+    <div class="glass-card rounded-3xl p-5 sm:p-7 shadow-xs border border-slate-200 relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-5 group">
+      
+      <div class="space-y-2 relative z-10">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold shadow-2xs">
+          <span class="flex h-2 w-2 relative">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-500 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-600"></span>
+          </span>
+          <span class="tracking-wide">✨ Verified Asset Management Service</span>
+        </div>
+        <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight flex flex-wrap items-center gap-2.5">
+          <span>รายการเครื่องเช่า</span>
+          <span class="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 bg-clip-text text-transparent drop-shadow-xs font-black" id="header-company-title">กำลังโหลด...</span>
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-500 flex items-center gap-2 font-normal" id="header-update-time">
+          <span class="inline-flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            📅 อัปเดตข้อมูลล่าสุด: กำลังโหลด...
+          </span>
+        </p>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-wrap items-center gap-2.5 no-print relative z-10">
+        <button onclick="exportToExcel()" class="group inline-flex items-center gap-2 px-4.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 shadow-md shadow-emerald-600/20 active:scale-95 transition-all duration-150 cursor-pointer">
+          <svg class="w-4 h-4 text-white group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Export Excel (.xlsx)
+        </button>
+        <button onclick="window.print()" class="group inline-flex items-center gap-2 px-4.5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-2xs hover:border-slate-300 active:scale-95 transition-all duration-150 cursor-pointer">
+          <svg class="w-4 h-4 text-slate-500 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          พิมพ์รายงาน
+        </button>
+      </div>
+    </div>
+
+    <!-- 📊 KPI Metric Cards (Status Summary) -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+      
+      <!-- Total -->
+      <div onclick="filterByStatus('all')" id="kpi-card-all" class="kpi-card glass-card rounded-3xl p-5 shadow-xs hover:shadow-md transition-shadow duration-150 cursor-pointer group border border-slate-200 hover:border-indigo-400 relative overflow-hidden">
+        <!-- Accent Top Bar -->
+        <div class="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-indigo-500 via-indigo-400 to-violet-500"></div>
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-semibold text-slate-500 group-hover:text-indigo-600 transition-colors">เครื่องทั้งหมดในสัญญา</span>
+          <div class="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center text-xl shadow-2xs">
+            💻
+          </div>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight font-mono" id="kpi-total">0</span>
+          <span class="text-xs text-slate-400 font-medium">เครื่อง</span>
+        </div>
+        <div class="mt-2 text-[11px] text-slate-500 font-normal flex items-center gap-1">
+          <span>📦 ทรัพย์สินทั้งหมดในระบบ</span>
+        </div>
+      </div>
+
+      <!-- Active / Renting -->
+      <div onclick="filterByStatus('rent')" id="kpi-card-rent" class="kpi-card glass-card rounded-3xl p-5 shadow-xs hover:shadow-md transition-shadow duration-150 cursor-pointer group border border-slate-200 hover:border-emerald-400 relative overflow-hidden">
+        <!-- Accent Top Bar -->
+        <div class="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600"></div>
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-semibold text-emerald-800 group-hover:text-emerald-900 transition-colors">กำลังเช่าใช้งาน</span>
+          <div class="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center text-xl shadow-2xs">
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+          </div>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-3xl sm:text-4xl font-black text-emerald-600 tracking-tight font-mono" id="kpi-rent">0</span>
+          <span class="text-xs text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200" id="kpi-rent-pct">(0%)</span>
+        </div>
+        <div class="mt-2 text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+          <span>✓ สัญญาเปิดใช้งานปกติ</span>
+        </div>
+      </div>
+
+      <!-- Spare (เครื่องสำรอง 30 วัน) -->
+      <div onclick="filterByStatus('spare')" id="kpi-card-spare" class="kpi-card glass-card rounded-3xl p-5 shadow-xs hover:shadow-md transition-shadow duration-150 cursor-pointer group border border-slate-200 hover:border-cyan-400 relative overflow-hidden">
+        <!-- Accent Top Bar -->
+        <div class="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-500"></div>
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-semibold text-cyan-900 group-hover:text-cyan-950 transition-colors">เครื่องสำรอง (Spare)</span>
+          <div class="w-10 h-10 rounded-2xl bg-cyan-50 border border-cyan-100 text-cyan-700 flex items-center justify-center text-xl shadow-2xs">
+            🔄
+          </div>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-3xl sm:text-4xl font-black text-cyan-700 tracking-tight font-mono" id="kpi-spare">0</span>
+          <span class="text-xs text-cyan-900 font-bold bg-cyan-100 px-2 py-0.5 rounded-full border border-cyan-200" id="kpi-spare-pct">(0%)</span>
+        </div>
+        <div class="mt-2 text-[11px] text-cyan-800 font-medium flex items-center gap-1">
+          <span>🔄 สลับเปลี่ยนหมุนเวียน 30 วัน</span>
+        </div>
+      </div>
+
+      <!-- Expired -->
+      <div onclick="filterByStatus('expired')" id="kpi-card-expired" class="kpi-card glass-card rounded-3xl p-5 shadow-xs hover:shadow-md transition-shadow duration-150 cursor-pointer group border border-slate-200 hover:border-rose-400 relative overflow-hidden">
+        <!-- Accent Top Bar -->
+        <div class="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-rose-500 via-rose-400 to-amber-500"></div>
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-semibold text-rose-800 group-hover:text-rose-900 transition-colors">สัญญาหมดอายุ</span>
+          <div class="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center text-xl shadow-2xs">
+            ⚠️
+          </div>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-3xl sm:text-4xl font-black text-rose-600 tracking-tight font-mono" id="kpi-expired">0</span>
+          <span class="text-xs text-rose-800 font-bold bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200" id="kpi-expired-pct">(0%)</span>
+        </div>
+        <div class="mt-2 text-[11px] text-rose-700 font-medium flex items-center gap-1">
+          <span>⚠️ ครบกำหนดระยะเวลาเช่า</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 💻 หมวดหมู่อุปกรณ์ (Device Categories Breakdown) -->
+    <div class="glass-card p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="text-base p-1.5 rounded-xl bg-indigo-50 border border-indigo-100">📦</span>
+          <span class="text-xs sm:text-sm font-extrabold text-slate-800">จำแนกตามประเภทอุปกรณ์ (Device Categories)</span>
+          <span class="text-[11px] text-slate-400 font-normal hidden sm:inline">(คลิกป้ายเพื่อกรองดูเฉพาะประเภทได้)</span>
+        </div>
+        <button onclick="filterByCategory('all')" id="btn-cat-clear" class="hidden text-xs text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer flex items-center gap-1 transition-colors">
+          <span>✕ แสดงทุกประเภท</span>
+        </button>
+      </div>
+
+      <!-- Category Pills List -->
+      <div id="category-pills-container" class="flex flex-wrap items-center gap-2 pt-1">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- 🔍 Controls: Modern Search & Segmented Filter Bar -->
+    <div class="glass-card p-4 sm:p-4.5 rounded-3xl border border-slate-200 shadow-xs space-y-3 no-print">
+      <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+        
+        <!-- Search Box -->
+        <div class="relative flex-1 group">
+          <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 text-base pointer-events-none transition-colors">🔍</span>
+          <input 
+            type="text" 
+            id="search-input" 
+            oninput="handleSearch(this.value)"
+            placeholder="พิมพ์ค้นหา S/N, ยี่ห้อ, รุ่น, สเปก, เลขที่ใบเสนอราคา, คู่สลับ..."
+            class="w-full pl-11 pr-24 py-3 rounded-2xl border border-slate-200 text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-colors bg-white shadow-xs"
+          >
+          <div class="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            <button 
+              type="button" 
+              id="btn-clear-search" 
+              onclick="clearSearch()" 
+              class="hidden w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center text-xs font-bold cursor-pointer transition-colors"
+              title="ล้างคำค้นหา"
+            >✕</button>
+            <span class="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded font-mono">
+              /
+            </span>
+          </div>
+        </div>
+
+        <!-- 🏢 บริษัทในเครือ / สาขา (แสดงอัตโนมัติเมื่อมีมากกว่า 1 บริษัท) -->
+        <div id="company-filter-wrapper" class="hidden shrink-0">
+          <select id="filter-company-select" onchange="filterByCompany(this.value)" class="w-full sm:w-auto px-4 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm font-bold text-slate-800 bg-white shadow-2xs focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer">
+            <option value="all">🏢 ทุกบริษัทในเครือ</option>
+          </select>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="flex items-center gap-1 bg-slate-100 p-1.5 rounded-2xl overflow-x-auto custom-scrollbar text-xs font-semibold shrink-0 border border-slate-200">
+          <button onclick="filterByStatus('all')" id="btn-tab-all" class="px-3.5 py-2 rounded-xl bg-white text-indigo-950 shadow-xs transition-all font-bold cursor-pointer">
+            ทั้งหมด (<span id="tab-count-all">0</span>)
+          </button>
+          <button onclick="filterByStatus('rent')" id="btn-tab-rent" class="px-3.5 py-2 rounded-xl text-slate-600 hover:text-slate-950 hover:bg-white/50 transition-all font-semibold cursor-pointer">
+            กำลังเช่า (<span id="tab-count-rent">0</span>)
+          </button>
+          <button onclick="filterByStatus('spare')" id="btn-tab-spare" class="px-3.5 py-2 rounded-xl text-slate-600 hover:text-slate-950 hover:bg-white/50 transition-all font-semibold cursor-pointer">
+            เครื่องสำรอง (<span id="tab-count-spare">0</span>)
+          </button>
+          <button onclick="filterByStatus('expired')" id="btn-tab-expired" class="px-3.5 py-2 rounded-xl text-slate-600 hover:text-slate-950 hover:bg-white/50 transition-all font-semibold cursor-pointer">
+            หมดสัญญา (<span id="tab-count-expired">0</span>)
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 📋 High-End Asset Table (MODEL is now in front of S/N) -->
+    <div class="glass-card rounded-3xl border border-slate-200 shadow-xs overflow-hidden print-border">
+      
+      <!-- Table Meta Bar -->
+      <div class="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center text-xs text-slate-500 font-medium gap-2">
+        <div class="flex items-center gap-2">
+          <span>แสดง</span>
+          <span class="font-extrabold text-indigo-600 text-sm font-mono" id="visible-count">0</span>
+          <span>จากทั้งหมด</span>
+          <span class="font-extrabold text-slate-900 text-sm font-mono" id="total-client-count">0</span>
+          <span>รายการ</span>
+        </div>
+        <div id="filter-applied-badge" class="hidden text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-2xs">
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
+          <span>🔍 กำลังกรองผลลัพธ์</span>
+        </div>
+      </div>
+
+      <!-- Desktop Table -->
+      <div class="hidden md:block overflow-x-auto custom-scrollbar">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+              <th class="py-4 px-4 text-center w-12 text-slate-400">#</th>
+              <!-- ⭐ MODEL is in front of SERIAL NUMBER ⭐ -->
+              <th class="py-4 px-4 min-w-[320px]">อุปกรณ์ & รุ่น (MODEL) / สเปก</th>
+              <th class="py-4 px-4 whitespace-nowrap">SERIAL NUMBER (S/N)</th>
+              <th class="py-4 px-4 whitespace-nowrap">ใบเสนอราคา (QUOTATION)</th>
+              <th onclick="toggleExpireSort()" class="py-4 px-4 whitespace-nowrap cursor-pointer hover:bg-slate-200/60 select-none transition-colors group" title="คลิกเพื่อสลับการเรียงลำดับวันหมดสัญญา (ใกล้ถึงก่อน / ไกลสุดก่อน)">
+                <div class="flex items-center gap-1.5">
+                  <span>ระยะเวลาสัญญา</span>
+                  <span id="sort-expire-indicator" class="text-indigo-600 font-bold text-[10px] bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg shadow-2xs group-hover:scale-105 transition-transform">▲ ใกล้ถึงก่อน</span>
+                </div>
+              </th>
+              <th class="py-4 px-4 text-center whitespace-nowrap">สถานะ</th>
+              <th class="py-4 px-4 min-w-[180px]">ประวัติสลับเครื่อง</th>
+            </tr>
+          </thead>
+          <tbody id="table-body" class="divide-y divide-slate-100 text-slate-700">
+            <!-- Dynamic rows will be rendered here -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mobile Cards List -->
+      <div id="mobile-cards-container" class="md:hidden divide-y divide-slate-100">
+        <!-- Dynamic mobile cards inserted here -->
+      </div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="hidden py-16 text-center space-y-3">
+        <div class="text-5xl animate-bounce">🔍</div>
+        <h3 class="text-base font-bold text-slate-800">ไม่พบรายการเครื่องที่ค้นหา</h3>
+        <p class="text-xs text-slate-400 max-w-sm mx-auto">ลองตรวจสอบคำสะกด หรือกดปุ่มล้างคำค้นหาเพื่อดูข้อมูลทั้งหมด</p>
+        <button onclick="clearSearch()" class="mt-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20 cursor-pointer">
+          ล้างคำค้นหาทั้งหมด
+        </button>
+      </div>
+
+    </div>
+
+    <!-- ☎️ Support Contact Card -->
+    <div class="rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 p-6 sm:p-8 text-white shadow-xl no-print border border-indigo-500/20">
+      <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
+        <div class="space-y-1.5">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-semibold">
+            <span>🛡️ Welkin Touch Technical Support</span>
+          </div>
+          <h3 class="text-lg sm:text-xl font-bold text-white tracking-tight">ต้องการแจ้งซ่อม สลับเครื่องทดแทน หรือต่อสัญญาเช่า?</h3>
+          <p class="text-xs sm:text-sm text-slate-300 font-light">ทีมวิศวกรผู้เชี่ยวชาญพร้อมดูแลและแก้ปัญหาให้ท่านตลอดอายุสัญญา</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 shrink-0">
+          <a href="tel:021234567" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white text-slate-900 hover:bg-slate-100 text-xs sm:text-sm font-bold transition-all shadow-md">
+            <span>📞</span> ติดต่อฝ่ายบริการ
+          </a>
+          <a href="https://line.me" target="_blank" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold transition-all shadow-md shadow-emerald-600/30">
+            <span>💬</span> LINE Official WKT
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- 📄 PDF Viewer Modal -->
+  <div id="pdf-modal" class="fixed inset-0 bg-slate-950/80 z-50 flex items-center justify-center p-3 sm:p-5 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+      
+      <!-- Modal Header -->
+      <div class="p-4 sm:px-6 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <span class="text-xl">📄</span>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-white" id="pdf-modal-title">เอกสารใบส่งของ</h3>
+            <p class="text-xs text-slate-400" id="pdf-modal-subtitle">Welkin Touch Delivery Document</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <a id="pdf-modal-external-link" href="#" target="_blank" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors">
+            <span>เปิดหน้าต่างใหม่ ↗</span>
+          </a>
+          <button onclick="closePdfModal()" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-sm font-bold cursor-pointer transition-colors">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal Body (Iframe) -->
+      <div class="flex-1 bg-slate-100 relative">
+        <iframe id="pdf-modal-iframe" src="" class="w-full h-full border-0"></iframe>
+        <div id="pdf-modal-loading" class="absolute inset-0 flex items-center justify-center bg-slate-50 text-slate-500 text-xs">
+          <span>⏳ กำลังโหลดเอกสาร...</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 🦶 Footer -->
+  <footer class="border-t border-slate-200 bg-white py-6 mt-12 text-center text-xs text-slate-400 no-print">
+    <div class="w-full max-w-[98%] mx-auto px-4 space-y-1">
+      <p class="font-medium text-slate-500">© 2026 Welkin Touch Co., Ltd. All rights reserved.</p>
+      <p class="text-[11px]">ระบบตรวจสอบทรัพย์สินองค์กรแบบเข้ารหัสความปลอดภัยขั้นสูง (Enterprise Encrypted Portal)</p>
+    </div>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl transition-opacity duration-200 opacity-0 pointer-events-none z-50 flex items-center gap-2.5 border border-slate-700">
+    <span class="text-emerald-400 text-base">✓</span> <span id="toast-message">คัดลอกสำเร็จ</span>
+  </div>
+
+  <!-- ⚡ Client Logic & Fast Hydration -->
+  <script>
+    // 🌐 URL สำหรับดึงข้อมูล API จาก Google Apps Script Gateway
+    const DEFAULT_GATEWAY_URL = "https://script.google.com/a/macros/welkintouch.com/s/AKfycbxyKN6ldirk2cBxst_pbNAdJG8DYAlK7F9wMyzRgCodJ5R9qiSYh5zmwhuMG_vslNSg/exec";
+
+    let RAW_PORTAL_DATA = null;
+    let allItems = [];
+    let currentFiltered = [];
+    let currentStatusFilter = 'all';
+    let currentCategoryFilter = 'all';
+    let currentCompanyFilter = 'all';
+    let searchQuery = '';
+    let currentSortDir = 'asc';
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadPortalFromGateway();
+    });
+
+    function showAccessDenied(message) {
+      const loader = document.getElementById('portal-loading-screen');
+      if (loader) loader.classList.add('hidden');
+      document.body.innerHTML = `
+        <div class="min-h-screen flex items-center justify-center p-4 bg-slate-100">
+          <div class="bg-white p-8 rounded-3xl shadow-xl border border-red-100 text-center max-w-md space-y-4">
+            <div class="text-5xl">🔒</div>
+            <h2 class="text-xl font-bold text-slate-900">ไม่สามารถเข้าถึงข้อมูลได้</h2>
+            <p class="text-xs text-slate-500 leading-relaxed">${message || 'ลิงก์ไม่ถูกต้องหรือถูกระงับสิทธิ์ กรุณาติดต่อฝ่ายบริการ Welkin Touch'}</p>
+          </div>
+        </div>
+      `;
+    }
+
+    async function loadPortalFromGateway() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token') || urlParams.get('key');
+      const apiUrl = urlParams.get('api') || DEFAULT_GATEWAY_URL;
+
+      if (!token) {
+        showAccessDenied("⛔ ไม่พบ Token การเข้าถึง กรุณาตรวจสอบลิงก์ของท่านอีกครั้ง");
+        return;
+      }
+
+      const loader = document.getElementById('portal-loading-screen');
+      if (loader) loader.classList.remove('hidden');
+
+      try {
+        const fetchUrl = `${apiUrl}?action=getClientPortalData&token=${encodeURIComponent(token)}`;
+        const res = await fetch(fetchUrl);
+        const data = await res.json();
+
+        if (!data || !data.success) {
+          showAccessDenied(data ? data.error : "ไม่สามารถโหลดข้อมูลสัญญาเช่าได้");
+          return;
+        }
+
+        RAW_PORTAL_DATA = data;
+        if (loader) loader.classList.add('hidden');
+        initPortal();
+      } catch (err) {
+        console.error("Fetch portal error:", err);
+        showAccessDenied("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์ กรุณาลองใหม่อีกครั้ง");
+      }
+    }
+
+    function initPortal() {
+      if (!RAW_PORTAL_DATA || !RAW_PORTAL_DATA.success) {
+        document.body.innerHTML = `
+          <div class="min-h-screen flex items-center justify-center p-4 bg-slate-100">
+            <div class="bg-white p-8 rounded-3xl shadow-xl border border-red-100 text-center max-w-md space-y-4">
+              <div class="text-5xl">🔒</div>
+              <h2 class="text-xl font-bold text-slate-900">ไม่สามารถเข้าถึงข้อมูลได้</h2>
+              <p class="text-xs text-slate-500 leading-relaxed">${RAW_PORTAL_DATA ? RAW_PORTAL_DATA.error : 'ลิงก์ไม่ถูกต้องหรือถูกระงับสิทธิ์'}</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      // 1. ตั้งชื่อหัวเรื่องและลูกค้า
+      const compName = RAW_PORTAL_DATA.companyName || 'ลูกค้าคนสำคัญ';
+      document.getElementById('nav-company-name').textContent = compName;
+      document.getElementById('header-company-title').textContent = compName;
+      document.getElementById('header-update-time').innerHTML = `
+        <span class="inline-flex items-center gap-1.5 bg-slate-100/90 text-slate-600 px-3 py-1 rounded-xl border border-slate-200/70 text-xs font-medium shadow-2xs">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          📅 อัปเดตข้อมูลล่าสุด: <b class="text-slate-800 font-semibold">${RAW_PORTAL_DATA.updatedAt || new Date().toLocaleDateString('th-TH')}</b>
+        </span>
+      `;
+
+      // 2. ประมวลผลข้อมูล (กรองตัดเครื่องที่รับคืนเข้าคลังแล้วออกอย่างเด็ดขาด)
+      allItems = (RAW_PORTAL_DATA.rows || []).filter(row => {
+        const qref = String(row.qref || '').trim();
+        const comp = String(row.company || '').trim();
+        const q = String(row.quotation || '').trim();
+        const isRet = qref.includes('รับคืนเมื่อ:') || qref.includes('รับคืนแล้ว') || qref.includes('รับคืนเข้าคลัง') || qref.includes('รับคืนเครื่องสำรอง');
+        if (isRet && (!comp || comp === '-' || !q || q === '-')) return false;
+        if ((!comp || comp === '-') && (!q || q === '-')) return false;
+        return true;
+      }).map((row, index) => {
+        const spareInfo = parseSpareInfo(row);
+        const expInfo = analyzeContractExpire(row.dateExpire);
+        const category = getDeviceCategory(row.model);
+        const brandInfo = detectBrand(row.model);
+        const cleanStart = cleanDateString(row.dateStart);
+        const cleanExpire = cleanDateString(row.dateExpire);
+
+        let statusKey = 'rent';
+        let statusLabel = 'กำลังเช่าใช้งาน';
+        let statusBadge = `
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/90 shadow-2xs">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-xs shadow-emerald-500/50"></span>
+            </span>
+            <span>กำลังเช่า</span>
+          </span>
+        `;
+
+        // ตรวจสอบสถานะเครื่องสำรอง (Spare) เป็นอันดับแรก
+        if (spareInfo && spareInfo.isSpare) {
+          statusKey = 'spare';
+          statusLabel = 'เครื่องสำรอง (Spare)';
+          const spareDayText = spareInfo.diffDays > 0 ? `เหลืออีก ${spareInfo.diffDays} วัน` : 'ครบกำหนดแล้ว';
+          statusBadge = `
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-300 shadow-2xs" title="เครื่องสำรองชั่วคราว 30 วัน">
+              <span class="animate-spin text-xs">🔄</span>
+              <span>Spare 30 วัน</span>
+              <span class="text-cyan-900 text-[10px] font-semibold font-mono">(${spareDayText})</span>
+            </span>
+          `;
+        } else if (expInfo.isExpired) {
+          statusKey = 'expired';
+          statusLabel = 'สัญญาหมดอายุ';
+          statusBadge = `
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200/90 shadow-2xs">
+              <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+              <span>หมดสัญญา</span>
+            </span>
+          `;
+        }
+
+        // ⏳ คำนวณค่าน้ำหนักวันหมดสัญญาสำหรับจัดเรียง (ค่าน้อย = ใกล้ถึง/หมดแล้ว อยู่บนสุด)
+        let sortExpiry = Infinity;
+        if (spareInfo && spareInfo.isSpare) {
+          const spDays = spareInfo.diffDays !== undefined ? spareInfo.diffDays : 30;
+          sortExpiry = Date.now() + (spDays * 86400000);
+        } else if (expInfo && expInfo.timestamp !== undefined && expInfo.timestamp !== Infinity) {
+          sortExpiry = expInfo.timestamp;
+        } else if (cleanExpire && cleanExpire !== '-') {
+          const ts = parseDateToTimestamp(cleanExpire);
+          if (ts) sortExpiry = ts;
+        }
+
+        return {
+          ...row,
+          _index: index + 1,
+          _statusKey: statusKey,
+          _statusLabel: statusLabel,
+          _statusBadge: statusBadge,
+          _spareInfo: spareInfo,
+          _category: category,
+          _brand: brandInfo,
+          _dateStartClean: cleanStart,
+          _dateExpireClean: cleanExpire,
+          _expInfo: expInfo,
+          _sortExpiry: sortExpiry,
+          _searchIndex: `${row.sn} ${row.tag || ''} ${row.model || ''} ${row.spec || ''} ${row.quotation || ''} ${row.qref || ''}`.toLowerCase()
+        };
+      });
+
+      // จัดเรียง allItems ให้สัญญาที่จะใกล้ถึงมาไว้ด้านบนสุดตั้งแต่แรก
+      allItems.sort((a, b) => {
+        let expA = a._sortExpiry !== undefined ? a._sortExpiry : Infinity;
+        let expB = b._sortExpiry !== undefined ? b._sortExpiry : Infinity;
+        if (expA !== expB) return expA - expB;
+        return String(a.sn || '').localeCompare(String(b.sn || ''));
+      });
+
+      // 3. แสดงป้ายสถิติหมวดหมู่, ตัวกรองบริษัทในเครือ และ KPI
+      renderCategoryPills();
+      renderCompanyFilterDropdown();
+      updateKpis();
+
+      // 4. แสดงผลตาราง
+      applyFilters();
+    }
+
+    // ⏱️ คำนวณข้อมูลเครื่องสำรอง (Spare) จาก qref และ stock
+    function parseSpareInfo(item) {
+      if (!item) return null;
+      const qref = String(item.qref || '').trim();
+      const s = String(item.stock || '').toLowerCase();
+      const r = String(item.remark || '').toLowerCase();
+
+      const isSpareInQref = qref.includes('Spare') || qref.includes('สำรอง');
+      const isSpareInStock = s.includes('spare') || r.includes('spare') || r.includes('สำรอง');
+
+      if (!isSpareInQref && !isSpareInStock) return null;
+
+      // ข้ามเครื่องที่รับคืนหรือไม่มีผู้เช่าแล้ว
+      if (qref.includes('รับคืนเครื่องสำรองเข้าคลัง') || qref.includes('ซ่อมเสร็จส่งคืนลูกค้า')) return null;
+
+      // สกัด S/N เดิมที่ถูกสลับ
+      let linkedSn = "";
+      let m1 = qref.match(/เปลี่ยนเป็น S\/N:\s*([A-Z0-9\-_]+)/i);
+      let m2 = qref.match(/แทน S\/N เดิม:\s*([A-Z0-9\-_]+)/i);
+      if (m1 && m1[1]) linkedSn = m1[1].trim();
+      else if (m2 && m2[1]) linkedSn = m2[1].trim();
+
+      // คำนวณวันหมดอายุ Spare
+      let diffDays = 30;
+      let today = new Date().setHours(0, 0, 0, 0);
+
+      let mExp = qref.match(/(?:สแปร์ขยายเวลาถึง|ครบกำหนด|ครบ)\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i);
+      if (mExp && mExp[1]) {
+        let ts = parseDateToTimestamp(mExp[1]);
+        if (ts) diffDays = Math.ceil((ts - today) / (1000 * 60 * 60 * 24));
+      } else if (item.dateStart && item.dateStart !== '-') {
+        let ts = parseDateToTimestamp(item.dateStart);
+        if (ts) {
+          let expTs = ts + 30 * 24 * 60 * 60 * 1000;
+          diffDays = Math.ceil((expTs - today) / (1000 * 60 * 60 * 24));
+        }
+      }
+
+      return {
+        isSpare: true,
+        linkedSn: linkedSn,
+        diffDays: diffDays,
+        isLoaner: qref.includes('แทน S/N เดิม'),
+        rawQref: qref
+      };
+    }
+
+    // 💻 จำแนกประเภทอุปกรณ์อัตโนมัติ (ตรงตามระบบ Admin 100% ครบทุกรุ่น)
+    function getDeviceCategory(modelName) {
+      if (!modelName || modelName === '-' || modelName === 'null') {
+        return { key: 'other', label: 'อุปกรณ์อื่นๆ', icon: '📁', color: 'slate' };
+      }
+      let m = String(modelName).trim().toLowerCase();
+
+      // 1. 🍎 iMac
+      if (/(imac|\bi[\s-]mac\b)/i.test(m)) {
+        return { key: 'imac', label: 'iMac', icon: '🖥️', color: 'teal' };
+      }
+      // 2. 🖨️ Printer / Scanner / POS (เครื่องพิมพ์, สแกนเนอร์, เครื่อง POS) - ต้องตรวจก่อน AIO เพราะรุ่นเครื่องพิมพ์มักมีคำว่า AIO หรือ All-in-One เช่น HP Smart Tank 750 AIO
+      if (/(printer|epson|zebra|laserjet|ecotank|ink\s*tank|smart\s*tank|pixma|deskjet|officejet|\bmfp\b|tm-t|lq-\d+|canon|brother|barcode|label|เครื่องพิมพ์|scanner|scanjet|สแกนเนอร์|เครื่องสแกน|\bpos\b|posone|pos\s*terminal)/i.test(m)) {
+        return { key: 'printer', label: 'Printer / Scanner', icon: '🖨️', color: 'emerald' };
+      }
+      // 3. 🖲️ AIO (All-in-One PC: Dell OptiPlex AIO, HP ProOne, HP ProStudio AIO, Lenovo Neo 30a/50a, ThinkCentre M90a/M70a, IdeaCentre AIO, HP 22-df/24-df/24-dp, etc.)
+      if (/(\baio\b|all[\s-]?in[\s-]?one|proone|prostudio|neo\s*30a|neo\s*50a|m90a|m70a|m80a|ideacentre|\b2[247]-df\w+|\b2[24]-dp\w+|\b2[24]-cb\w+|center\s*720)/i.test(m) && !/(printer|epson|zebra|laserjet|ecotank|ink\s*tank|smart\s*tank|pixma|deskjet|officejet|\bmfp\b|canon|brother|เครื่องพิมพ์|scanner|scanjet|สแกนเนอร์)/i.test(m)) {
+        return { key: 'aio', label: 'All-in-One (AIO)', icon: '🖲️', color: 'teal' };
+      }
+      // 4. 🍎 MacBook
+      if (/(mac[\s-]?book)/i.test(m)) {
+        return { key: 'macbook', label: 'MacBook', icon: '💻', color: 'indigo' };
+      }
+      // 5. 🔋 UPS (เครื่องสำรองไฟ)
+      if (/(ups|syndome|apc|cleanline|cyberpower|zircon|santak|emerson|vertiv|eaton|chuphotic|\b\d+va\b|สำรองไฟ)/i.test(m)) {
+        return { key: 'ups', label: 'UPS สำรองไฟ', icon: '🔋', color: 'amber' };
+      }
+      // 6. 📽️ Projector (เครื่องฉายโปรเจคเตอร์)
+      if (/(projector|โปรเจคเตอร์|เครื่องฉาย|\bx1228h\b|eb-\w+|viewsonic\s*p[a-z]\d+|benq)/i.test(m)) {
+        return { key: 'projector', label: 'Projector', icon: '📽️', color: 'orange' };
+      }
+      // 7. 📱 Tablet & Smartphone (แท็บเล็ตและโทรศัพท์มือถือ)
+      if (/(ipad|iphone|galaxy\s*tab|tab\s*active|tab\s*s\d+|tab\s*a\d+|tab\s*lite|tablet|samsung\s*a\d+|samsung\s*s\d+|galaxy\s*s\d+|galaxy\s*a\d+|smartphone|rugged\s*tablet|em[\s\-_]i\d+|em[\s\-_]t\d+|fz-g\d+|toughbook|apple\s*watch|มือถือ|แท็บเล็ต)/i.test(m) && !/(macbook|imac|mac\s*mini|mac\s*studio|pencil|pen|airpod|folio|keyboard|charger|cable)/i.test(m)) {
+        return { key: 'tablet', label: 'Tablet & Phone', icon: '📱', color: 'pink' };
+      }
+      // 8. 📺 TV / Commercial Display
+      if (/(\btv\b|smart\s*tv|viewsonic\s*ifp|ifp\d+|digital\s*signage|ทีวี)/i.test(m)) {
+        return { key: 'tv', label: 'TV / Display', icon: '📺', color: 'rose' };
+      }
+      // 9. 🖥️ Monitor (จอมอนิเตอร์: Dell P2419H/P2425HE/P2725H/U24/SE24, HP P204v, MSI PRO MP251, LG 32UR500K/24MR, ThinkVision, etc.)
+      if (/(monitor|thinkvision|ultrasharp|odyssey|display|จอภาพ|จอ\b|\b[peus]\d{4}[a-z]{0,3}\b|\bp\d{3}v\b|\b\d{2}ur\d+|\b\d{2}mr\d+|\b\d{2}qp\d+|\b\d{2}qn\d+|\b\d{2}up\d+|\b\d{2}wp\d+|\be\d{2}-\d+|\bp\d{2}[a-z]?-\d+|\bu\d{2}-\d+|\bv\d{2}-\d+|\bse\d{2}|\bl\d{2}[a-z]?-\d+|\bs\d{2}[a-z]?-\d+|\bt\d{2}[a-z]?-\d+|\b\d{2}(?:\.\d+)?["”]\s*w\b|\b\d{2}(?:\.\d+)?["”]\s*4k\b|\bseries\s*[357]\s*pro\b|\b\d{2,3}p[n]?\b|\bpro\s*mp\d{2,3}\w*\b|\bmp\d{3}\w*\b)/i.test(m) && !/(dell\s*pro\s*(?:1[3-6]|slim)|qcs1250|ect1250|precision|latitude)/i.test(m)) {
+        return { key: 'monitor', label: 'Monitor (จอภาพ)', icon: '🖥️', color: 'purple' };
+      }
+      // 10. 💻 Notebook / Laptop (ครอบคลุม ThinkPad, ThinkBook, Legion, LOQ, Latitude, Inspiron, TravelMate, ProBook, EliteBook, ExpertBook, TUF, Omen, Victus, Dell Pro 13/14/15/16, Precision Mobile Workstations 34xx/35xx/54xx/55xx/75xx/76xx/77xx / 5570, HP 15s-xxx, Surface, ฯลฯ)
+      if (/(\bnb\b|notebook|laptop|macbook|thinkpad|thinkbook|latitude|travelmate|tmp\d+|probook|elitebook|expertbook|zenbook|surface|ideapad|vivobook|yoga|vostro|insp[ir]+on|xps|\bprecision\s*(?:m|mobile\s*)?(?:34|35|54|55|75|76|77)\d{2}\w*\b|tuf|omen|victus|legion|\bloq\b|pavilion|x1\s*carbon|swift|aspire|nitro|predator|katana|stealth|modern|prestige|\b(?:lenovo\s+)?(?:[petlxv]\d{2}[a-z]?)\s+gen\d+|\b(?:lenovo\s+)?[petlxv]\d{2}s?\b|\b\d{2}s-[a-z0-9]+|\b\d{2}-[a-z0-9]+|\b(?:dell\s+)?pro\s*(?:13|14|15|16)\b|\bpa13\d{3}\b|\bpc16\d{3}\b|\basu-nx\w*\b|\bnx08f1\b|\bdell\s*(?:insp[ir]+on\s*|latitude\s*)?[357]\d{3}\b|\bdell\s*\d{4}\b)/i.test(m) && !/(dell\s*(?:pro\s*)?slim|qcs1250|ect1250|\bmt\b|\b\d{4}mt\b|\bsff\b|\b\d{4}sff\b|\bcompact\b|\bdesktop\b|\btwr\b|\btower\b)/i.test(m)) {
+        return { key: 'notebook', label: 'Notebook', icon: '💻', color: 'blue' };
+      }
+      // 11. 🖳 PC / Desktop / Workstation / Server / Mini PC
+      if (/(\bpc\b|desktop|thinkcentre|thinkstation|expertcenter|optiplex|prodesk|elitedesk|pro\s*mini|pro\s*400|tower|\btwr\b|sff|\bmicro\b|mac\s*mini|mac\s*studio|work\s*station|workstation|server|poweredge|\bdiy\b|\bmt\b|\b\d{4}mt\b|\b\d{4}sff\b|microtower|veriton|\bm75q\b|\bm70s\b|\bm720s\b|\bm90\b|\bpc\s*i[3579]\b|\bp\d{3}\b|\bprecision\s*(?:32\d{2}|34\d{2}|36\d{2}|58\d{2}|78\d{2}|79\d{2}|t\d{4})\w*\b|\bcompact\b|\bdell\s*(?:30|50|70)\d{2}\w*|\b(?:hp\s*)?280\s*g\d|\b(?:hp\s*)?400\s*g\d\s*(?:mt|sff)|\b(?:dell\s+)?pro\s+slim\b|\bdell\s+slim\b|\bqcs1250\b|\bect1250\b|\bneo\s*50s\b|\bneo\s*\d{2}[st]\b|\bcubi\b|\bnuc\b|\bmini\s*msi\b|\bz[2468]\s*twr\b)/i.test(m)) {
+        return { key: 'pc', label: 'PC / Desktop', icon: '🖳', color: 'slate' };
+      }
+
+      return { key: 'other', label: 'อุปกรณ์อื่นๆ', icon: '📁', color: 'slate' };
+    }
+
+    // เรนเดอร์ปุ่มหมวดหมู่ด้านบน (Notebook กี่ตัว, Macbook กี่ตัว, จอกี่ตัว)
+    function renderCategoryPills() {
+      const container = document.getElementById('category-pills-container');
+      const counts = {};
+
+      allItems.forEach(i => {
+        const k = i._category.key;
+        if (!counts[k]) {
+          counts[k] = { ...i._category, count: 0 };
+        }
+        counts[k].count++;
+      });
+
+      // จัดเรียงตามจำนวนมากไปน้อย
+      const sorted = Object.values(counts).sort((a, b) => b.count - a.count);
+
+      container.innerHTML = `
+        <button onclick="filterByCategory('all')" id="btn-cat-all" class="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 transition-all duration-200 cursor-pointer scale-102">
+          <span>📦 ทั้งหมด</span>
+          <span class="bg-white/20 text-white px-1.5 py-0.2 rounded-md font-mono text-[11px] font-bold">${allItems.length}</span>
+        </button>
+      ` + sorted.map(c => `
+        <button onclick="filterByCategory('${c.key}')" id="btn-cat-${c.key}" class="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/80 hover:bg-white text-slate-700 border border-slate-200/90 shadow-2xs hover:border-indigo-300 hover:text-indigo-600 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
+          <span class="group-hover:scale-110 transition-transform">${c.icon}</span>
+          <span>${c.label}</span>
+          <span class="bg-slate-100 group-hover:bg-indigo-50 text-slate-800 group-hover:text-indigo-700 px-1.5 py-0.2 rounded-md font-mono font-bold text-[11px] transition-colors">${c.count}</span>
+        </button>
+      `).join('');
+    }
+
+    // กรองตามหมวดหมู่อุปกรณ์
+    function filterByCategory(catKey) {
+      currentCategoryFilter = catKey;
+      const clearBtn = document.getElementById('btn-cat-clear');
+
+      // อัปเดตสีปุ่ม
+      const allButtons = document.querySelectorAll('#category-pills-container button');
+      allButtons.forEach(btn => {
+        btn.className = 'group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white/80 hover:bg-white text-slate-700 border border-slate-200/90 shadow-2xs hover:border-indigo-300 hover:text-indigo-600 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer';
+      });
+
+      const activeBtn = document.getElementById(`btn-cat-${catKey}`);
+      if (activeBtn) {
+        activeBtn.className = 'group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25 transition-all duration-200 cursor-pointer scale-102';
+      }
+
+      if (catKey !== 'all') clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+
+      applyFilters();
+    }
+
+    // 🏢 จัดการตัวกรองบริษัทในเครือ / สาขา (แสดงเมื่อมีหลายบริษัท)
+    function renderCompanyFilterDropdown() {
+      const wrapper = document.getElementById('company-filter-wrapper');
+      const select = document.getElementById('filter-company-select');
+      const compCounts = {};
+
+      allItems.forEach(i => {
+        const c = String(i.company || '-').trim();
+        compCounts[c] = (compCounts[c] || 0) + 1;
+      });
+
+      const uniqueComps = Object.keys(compCounts).sort();
+
+      // หากมีแค่ 1 บริษัท ไม่ต้องแสดง dropdown
+      if (uniqueComps.length <= 1) {
+        wrapper.classList.add('hidden');
+        return;
+      }
+
+      wrapper.classList.remove('hidden');
+      select.innerHTML = `
+        <option value="all">🏢 ทุกบริษัทในเครือ (${allItems.length})</option>
+        ${uniqueComps.map(c => `
+          <option value="${escapeHtml(c)}">${escapeHtml(c)} (${compCounts[c]})</option>
+        `).join('')}
+      `;
+    }
+
+    function filterByCompany(compVal) {
+      currentCompanyFilter = compVal;
+      applyFilters();
+    }
+
+    // คำนวณวันหมดอายุสัญญา
+    function analyzeContractExpire(dateStr) {
+      if (!dateStr || dateStr === '-' || dateStr === 'null') {
+        return { isExpired: false, daysRemaining: null, label: '-', timestamp: Infinity };
+      }
+      const clean = cleanDateString(String(dateStr)).trim().toUpperCase();
+      if (clean.includes('EXP')) {
+        return { isExpired: true, daysRemaining: -1, label: 'หมดสัญญาแล้ว', timestamp: 0 };
+      }
+      const ts = parseDateToTimestamp(clean);
+      if (!ts) return { isExpired: false, daysRemaining: null, label: clean, timestamp: Infinity };
+
+      const today = new Date().setHours(0, 0, 0, 0);
+      const diffDays = Math.ceil((ts - today) / (1000 * 60 * 60 * 24));
+
+      if (diffDays < 0) {
+        return { isExpired: true, daysRemaining: diffDays, label: 'หมดสัญญาแล้ว', timestamp: ts };
+      } else if (diffDays <= 30) {
+        return { isExpired: false, daysRemaining: diffDays, isNear: true, label: `เหลืออีก ${diffDays} วัน`, timestamp: ts };
+      } else {
+        return { isExpired: false, daysRemaining: diffDays, isNear: false, label: `เหลืออีก ${diffDays} วัน`, timestamp: ts };
+      }
+    }
+
+    function parseDateToTimestamp(str) {
+      if (!str) return null;
+      const parts = String(str).trim().split(/[\/\-\.]/);
+      if (parts.length < 3) return null;
+      let d = parseInt(parts[0], 10);
+      let m = parseInt(parts[1], 10) - 1;
+      let y = parseInt(parts[2], 10);
+      if (y > 2400) y -= 543;
+      else if (y < 100) y += 2000;
+      const dt = new Date(y, m, d);
+      return isNaN(dt.getTime()) ? null : dt.getTime();
+    }
+
+    function cleanDateString(str) {
+      if (!str) return '-';
+      let s = String(str).trim();
+      s = s.replace(/^0+([1-9])\//, '0$1/');
+      return s;
+    }
+
+    function detectBrand(model) {
+      if (!model) return { name: 'IT DEVICE', color: 'bg-slate-100 text-slate-700 border-slate-200' };
+      const m = String(model).toLowerCase();
+      if (m.includes('samsung') || m.includes('odyssey')) return { name: 'SAMSUNG', color: 'bg-sky-50 text-sky-700 border-sky-200 shadow-2xs' };
+      if (m.includes('dell') || m.includes('optiplex') || m.includes('latitude') || m.includes('precision') || m.includes('vostro')) return { name: 'DELL', color: 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-2xs' };
+      if (m.includes('asus') || m.includes('expertbook') || m.includes('zenbook') || m.includes('vivobook') || m.includes('tuf') || m.includes('rog')) return { name: 'ASUS', color: 'bg-blue-50 text-blue-700 border-blue-200 shadow-2xs' };
+      if (m.includes('acer') || m.includes('travelmate') || m.includes('aspire') || m.includes('nitro') || m.includes('veriton')) return { name: 'ACER', color: 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs' };
+      if (m.includes('lenovo') || m.includes('thinkpad') || m.includes('thinkcentre') || m.includes('ideapad') || m.includes('legion')) return { name: 'LENOVO', color: 'bg-red-50 text-red-700 border-red-200 shadow-2xs' };
+      if (m.includes('hp') || m.includes('probook') || m.includes('elitebook') || m.includes('prodesk') || m.includes('zbook') || m.includes('victus') || m.includes('omen')) return { name: 'HP', color: 'bg-cyan-50 text-cyan-700 border-cyan-200 shadow-2xs' };
+      if (m.includes('apple') || m.includes('macbook') || m.includes('imac') || m.includes('ipad')) return { name: 'APPLE', color: 'bg-slate-100 text-slate-800 border-slate-300 shadow-2xs' };
+      if (m.includes('msi')) return { name: 'MSI', color: 'bg-rose-50 text-rose-700 border-rose-200 shadow-2xs' };
+      if (m.includes('lg')) return { name: 'LG', color: 'bg-pink-50 text-pink-700 border-pink-200 shadow-2xs' };
+      if (m.includes('viewsonic')) return { name: 'VIEWSONIC', color: 'bg-teal-50 text-teal-700 border-teal-200 shadow-2xs' };
+      if (m.includes('epson') || m.includes('canon') || m.includes('brother')) return { name: 'PRINTER', color: 'bg-emerald-50 text-emerald-800 border-emerald-200 shadow-2xs' };
+      if (m.includes('ups') || m.includes('syndome') || m.includes('cleanline') || m.includes('apc') || m.includes('cyberpower')) return { name: 'UPS', color: 'bg-amber-50 text-amber-800 border-amber-200 shadow-2xs' };
+      return { name: 'DEVICE', color: 'bg-slate-100 text-slate-700 border-slate-200' };
+    }
+
+    // 🏷️ ระบบจัดหมวดและมาร์คสีสเปกอุปกรณ์อัจฉริยะ (Smart Hardware Spec Color Tagger)
+    function getSpecChipStyle(part) {
+      const p = part.toLowerCase().trim();
+      
+      // 1. CPU / Processor (i3/i5/i7/i9, Ryzen, Celeron, Xeon, Apple M1/M2/M3/M4, Ultra, etc.)
+      if (/i[3579]-|core\s*i[3579]|ryzen|celeron|pentium|xeon|ultra\s*[579]|apple\s*m[1234]|cpu|\bm[1234]\s*(?:pro|max|ultra)?\b/.test(p)) {
+        return 'bg-blue-50 text-blue-700 border-blue-200';
+      }
+      // 2. RAM (Ram 8GB/16GB/32GB/64GB, DDR4, DDR5)
+      if (/\bram\b|ddr[345]|\b\d+\s*gb\s*ram\b/.test(p) || (/\b\d+\s*gb\b/.test(p) && p.includes('ram'))) {
+        return 'bg-purple-50 text-purple-700 border-purple-200';
+      }
+      // 3. Storage (M.2, SSD, NVMe, HDD, ROM, or TB/GB capacity)
+      if (/m\.2|ssd|nvme|hdd|emmc|ufs|\b\d+\s*(?:tb|gb)\s*(?:ssd|hdd|m\.2|nvme|rom)?\b/.test(p) && !/\bram\b/.test(p) && !/rtx|gtx|vram/.test(p)) {
+        return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+      }
+      // 4. GPU / Graphics Card (RTX, GTX, GeForce, Radeon, Iris, UHD, Quadro, Arc, VRAM)
+      if (/rtx|gtx|geforce|radeon|iris|quadro|arc|graphics|gpu|vram|\d+\s*gb?\s*(?:vram|g)\b/.test(p)) {
+        return 'bg-amber-50 text-amber-800 border-amber-200';
+      }
+      // 5. Display / Screen / Resolution (15.6", 14", 27", IPS, Hz, QHD, FHD, 4K, OLED, Retina)
+      if (/\d+(?:\.\d+)?\s*(?:["”]|inch)|ips|hz|qhd|fhd|uhd|4k|oled|retina|display|screen|resolution/.test(p)) {
+        return 'bg-cyan-50 text-cyan-800 border-cyan-200';
+      }
+      // 6. Connectivity / OS / License (Windows, macOS, Office, HDMI, DP, Type-C, WiFi, LAN, 5G)
+      if (/win\s*1[01]|windows|macos|ios|android|office|hdmi|dp|type-?c|thunderbolt|usb|wifi|lan|5g|lte/.test(p)) {
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      }
+      // 7. General / Other Specs
+      return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+
+    function renderSpecChips(specStr) {
+      if (!specStr || specStr === '-' || specStr === 'null') {
+        return '';
+      }
+      const parts = String(specStr).split(/[,;]|\s+\/\s+/).map(p => p.trim()).filter(Boolean);
+      return `
+        <div class="flex flex-wrap gap-1 mt-1">
+          ${parts.map(p => {
+            const chipClass = getSpecChipStyle(p);
+            return `
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-semibold border ${chipClass} whitespace-nowrap shadow-2xs">
+                ${escapeHtml(p)}
+              </span>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    // ⚡ ตัวนับตัวเลขแอนิเมชันสมูทและไว (Fast Number Counter)
+    function animateNumber(elementId, targetVal, duration = 300) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      const target = parseInt(targetVal, 10) || 0;
+      const currentText = el.textContent.replace(/[^0-9]/g, '');
+      const start = currentText ? parseInt(currentText, 10) : 0;
+      if (start === target) {
+        el.textContent = target;
+        return;
+      }
+      const startTime = performance.now();
+      function step(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3);
+        el.textContent = Math.round(start + (target - start) * ease);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          el.textContent = target;
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateKpis() {
+      const total = allItems.length;
+      const rent = allItems.filter(i => i._statusKey === 'rent').length;
+      const spare = allItems.filter(i => i._statusKey === 'spare').length;
+      const expired = allItems.filter(i => i._statusKey === 'expired').length;
+
+      animateNumber('kpi-total', total);
+      animateNumber('kpi-rent', rent);
+      animateNumber('kpi-spare', spare);
+      animateNumber('kpi-expired', expired);
+
+      const rentPct = total > 0 ? ((rent / total) * 100).toFixed(1) : 0;
+      const sparePct = total > 0 ? ((spare / total) * 100).toFixed(1) : 0;
+      const expPct = total > 0 ? ((expired / total) * 100).toFixed(1) : 0;
+
+      document.getElementById('kpi-rent-pct').textContent = `(${rentPct}%)`;
+      document.getElementById('kpi-spare-pct').textContent = `(${sparePct}%)`;
+      document.getElementById('kpi-expired-pct').textContent = `(${expPct}%)`;
+
+      document.getElementById('tab-count-all').textContent = total;
+      document.getElementById('tab-count-rent').textContent = rent;
+      document.getElementById('tab-count-spare').textContent = spare;
+      document.getElementById('tab-count-expired').textContent = expired;
+      document.getElementById('total-client-count').textContent = total;
+    }
+
+    function applyFilters() {
+      let filtered = allItems;
+
+      if (currentStatusFilter !== 'all') {
+        filtered = filtered.filter(i => i._statusKey === currentStatusFilter);
+      }
+
+      if (currentCategoryFilter !== 'all') {
+        filtered = filtered.filter(i => i._category.key === currentCategoryFilter);
+      }
+
+      if (currentCompanyFilter !== 'all') {
+        filtered = filtered.filter(i => String(i.company || '').trim().toLowerCase() === currentCompanyFilter.trim().toLowerCase());
+      }
+
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase().trim();
+        filtered = filtered.filter(i => i._searchIndex.includes(q) || String(i.company || '').toLowerCase().includes(q));
+      }
+
+      // ⏳ จัดเรียงตามระยะเวลาสัญญา (ที่จะใกล้ถึงมาไว้ด้านบนสุด)
+      filtered = [...filtered].sort((a, b) => {
+        let expA = a._sortExpiry !== undefined ? a._sortExpiry : Infinity;
+        let expB = b._sortExpiry !== undefined ? b._sortExpiry : Infinity;
+
+        if (expA !== expB) {
+          return currentSortDir === 'asc' ? expA - expB : expB - expA;
+        }
+        return String(a.sn || '').localeCompare(String(b.sn || ''));
+      });
+
+      currentFiltered = filtered;
+      renderTable();
+    }
+
+    // 🔄 ฟังก์ชันสลับการเรียงลำดับวันหมดสัญญา (คลิกที่หัวตาราง)
+    function toggleExpireSort() {
+      currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+      const ind = document.getElementById('sort-expire-indicator');
+      if (ind) {
+        ind.textContent = currentSortDir === 'asc' ? '▲ ใกล้ถึงก่อน' : '▼ ไกลสุดก่อน';
+      }
+      applyFilters();
+    }
+
+    // 📋 เรนเดอร์ตาราง (MODEL นำหน้า S/N พร้อมปุ่ม PDF มีใบส่งของ)
+    function renderTable() {
+      const tbody = document.getElementById('table-body');
+      const mobileContainer = document.getElementById('mobile-cards-container');
+      const emptyState = document.getElementById('empty-state');
+      const visibleCount = document.getElementById('visible-count');
+      const filterBadge = document.getElementById('filter-applied-badge');
+
+      visibleCount.textContent = currentFiltered.length;
+
+      if (searchQuery || currentStatusFilter !== 'all' || currentCategoryFilter !== 'all' || currentCompanyFilter !== 'all') {
+        filterBadge.classList.remove('hidden');
+      } else {
+        filterBadge.classList.add('hidden');
+      }
+
+      if (currentFiltered.length === 0) {
+        tbody.innerHTML = '';
+        mobileContainer.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      // 💻 Desktop Table View
+      tbody.innerHTML = currentFiltered.map((item, idx) => {
+        // แถบวันที่เหลือนับถอยหลัง
+        let daysBadge = '';
+        if (item._statusKey === 'spare') {
+          const spDays = item._spareInfo ? item._spareInfo.diffDays : 30;
+          daysBadge = `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded-full border border-cyan-300 mt-1">🔄 Spare 30 วัน (${spDays > 0 ? 'เหลือ ' + spDays + ' วัน' : 'ครบกำหนด'})</span>`;
+        } else if (item._expInfo.isExpired) {
+          daysBadge = `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 mt-1"><span class="w-1 h-1 rounded-full bg-rose-500"></span>หมดสัญญาแล้ว</span>`;
+        } else if (item._expInfo.isNear) {
+          daysBadge = `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 mt-1"><span class="w-1 h-1 rounded-full bg-amber-500"></span>${item._expInfo.label}</span>`;
+        } else if (item._expInfo.daysRemaining) {
+          daysBadge = `<span class="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 mt-1"><span class="w-1 h-1 rounded-full bg-emerald-500"></span>${item._expInfo.label}</span>`;
+        }
+
+        // ปุ่มดู PDF ใบส่งของ (ถ้ามีไฟล์)
+        let pdfButtonHtml = '';
+        if (item.qDoc && item.qDoc.fileUrl) {
+          const docUrl = item.qDoc.previewUrl || item.qDoc.fileUrl;
+          const fn = item.qDoc.fileName || 'ใบส่งของ.pdf';
+          pdfButtonHtml = `
+            <button onclick="openPdfModal('${escapeHtml(docUrl)}', '${escapeHtml(fn)}')" title="คลิกเปิดดูไฟล์ PDF ใบส่งของที่เซ็นรับแล้ว" class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded border border-emerald-300 transition-all cursor-pointer shadow-2xs mt-1">
+              <span>📄 มีใบส่งของ</span>
+            </button>
+          `;
+        }
+
+        // รายละเอียดคู่สลับ Spare (ถ้ามี)
+        let spareLinkedBadge = '';
+        if (item._spareInfo && item._spareInfo.linkedSn) {
+          spareLinkedBadge = `
+            <div class="mt-1">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-100 text-cyan-900 border border-cyan-300">
+                🔄 สลับแทน S/N เดิม: <b class="font-mono">${escapeHtml(item._spareInfo.linkedSn)}</b>
+              </span>
+            </div>
+          `;
+        }
+
+        return `
+          <tr class="group hover:bg-indigo-50/40 transition-colors duration-100 border-b border-slate-100 hover:border-l-4 hover:border-l-indigo-600">
+            <!-- 1. Index -->
+            <td class="py-4 px-4 text-center font-semibold text-slate-400 group-hover:text-indigo-600 transition-colors">${idx + 1}</td>
+
+            <!-- ⭐ 2. MODEL นำหน้า S/N พร้อม Spec Chips ด้านล่าง ⭐ -->
+            <td class="py-4 px-4">
+              <div class="space-y-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${item._brand.color}">
+                    ${item._brand.name}
+                  </span>
+                  <span class="text-xs text-slate-500">${item._category.icon} ${item._category.label}</span>
+                </div>
+                <div class="font-bold text-slate-900 text-xs tracking-tight group-hover:text-indigo-950 transition-colors">
+                  ${escapeHtml(item.model || '-')}
+                </div>
+                ${item.company ? `
+                  <div class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                    <span>🏢</span> <span>${escapeHtml(item.company)}</span>
+                  </div>
+                ` : ''}
+                ${renderSpecChips(item.spec)}
+              </div>
+            </td>
+
+            <!-- ⭐ 3. SERIAL NUMBER (S/N) ⭐ -->
+            <td class="py-4 px-4 whitespace-nowrap">
+              <div class="flex items-center gap-2">
+                <span class="sn-font font-bold text-slate-900 bg-slate-100/90 hover:bg-white px-2.5 py-1 rounded-lg border border-slate-200/90 text-xs tracking-wider select-all transition-colors">
+                  ${escapeHtml(item.sn || '-')}
+                </span>
+                <button onclick="copyToClipboard('${escapeHtml(item.sn || '')}', this)" title="คัดลอก S/N" class="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-slate-200 transition-all cursor-pointer">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                </button>
+              </div>
+              ${spareLinkedBadge}
+            </td>
+
+            <!-- 4. QUOTATION พร้อมปุ่ม PDF มีใบส่งของ -->
+            <td class="py-4 px-4 whitespace-nowrap">
+              <div class="flex flex-col items-start gap-1">
+                <span class="inline-flex items-center gap-1 font-mono font-bold text-xs text-indigo-700 bg-indigo-50/80 px-2.5 py-1 rounded-lg border border-indigo-200/80 whitespace-nowrap shadow-2xs">
+                  📄 ${escapeHtml(item.quotation || '-')}
+                </span>
+                ${pdfButtonHtml}
+              </div>
+            </td>
+
+            <!-- 5. ระยะเวลาสัญญา -->
+            <td class="py-4 px-4 whitespace-nowrap">
+              <div class="flex flex-col text-[11px] leading-tight text-slate-600">
+                <span>เริ่ม: <b class="text-slate-800 font-medium">${escapeHtml(item._dateStartClean)}</b></span>
+                <span class="mt-0.5">สิ้นสุด: <b class="text-slate-900 font-bold">${escapeHtml(item._dateExpireClean)}</b></span>
+                <div>${daysBadge}</div>
+              </div>
+            </td>
+
+            <!-- 6. สถานะ -->
+            <td class="py-4 px-4 text-center whitespace-nowrap">
+              ${item._statusBadge}
+            </td>
+
+            <!-- 7. ประวัติสลับเครื่อง -->
+            <td class="py-4 px-4 text-xs text-slate-600 max-w-xs">
+              ${item.qref && item.qref !== '-' ? `
+                <div class="text-[11px] text-slate-700 font-mono leading-snug bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80 inline-block shadow-2xs" title="${escapeHtml(item.qref)}">
+                  🔄 ${escapeHtml(item.qref)}
+                </div>
+              ` : '<span class="text-slate-300">-</span>'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // 📱 Mobile Cards View
+      mobileContainer.innerHTML = currentFiltered.map((item, idx) => `
+        <div class="p-4 space-y-3 hover:bg-indigo-50/20 transition-colors border-b border-slate-100 last:border-b-0 hover:border-l-4 hover:border-l-indigo-600">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <span class="text-[10px] font-bold text-slate-400">#${idx + 1}</span>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${item._brand.color}">${item._brand.name}</span>
+                <span class="font-bold text-slate-900 text-sm">${escapeHtml(item.model || '-')}</span>
+              </div>
+              <div class="text-slate-500 text-[10px]">${item._category.icon} ${item._category.label}</div>
+            </div>
+            <div>${item._statusBadge}</div>
+          </div>
+
+          <div class="space-y-1">
+            ${renderSpecChips(item.spec)}
+            <div class="flex items-center gap-2 pt-1">
+              <span class="sn-font font-bold text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                ${escapeHtml(item.sn || '-')}
+              </span>
+              <button onclick="copyToClipboard('${escapeHtml(item.sn || '')}', this)" class="text-slate-400 hover:text-indigo-600 text-xs p-1">📋</button>
+            </div>
+            ${item._spareInfo && item._spareInfo.linkedSn ? `
+              <div class="text-[10px] text-cyan-800 font-bold bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200 mt-1">
+                🔄 สลับแทน S/N เดิม: ${escapeHtml(item._spareInfo.linkedSn)}
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between pt-2 border-t border-slate-100 text-[11px] gap-2">
+            <div class="flex items-center gap-1.5">
+              <span class="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-xs">
+                ${escapeHtml(item.quotation || '-')}
+              </span>
+              ${item.qDoc && item.qDoc.fileUrl ? `
+                <button onclick="openPdfModal('${escapeHtml(item.qDoc.previewUrl || item.qDoc.fileUrl)}', '${escapeHtml(item.qDoc.fileName || 'ใบส่งของ.pdf')}')" class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                  📄 ใบส่งของ
+                </button>
+              ` : ''}
+            </div>
+            <div class="text-right text-slate-500 text-[10px]">
+              สิ้นสุด: <b class="text-slate-800">${escapeHtml(item._dateExpireClean)}</b>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ฟังก์ชันเปิดดูเอกสาร PDF ใบส่งของ
+    function openPdfModal(url, fileName) {
+      if (!url) return;
+      const modal = document.getElementById('pdf-modal');
+      const iframe = document.getElementById('pdf-modal-iframe');
+      const loading = document.getElementById('pdf-modal-loading');
+      const title = document.getElementById('pdf-modal-title');
+      const extLink = document.getElementById('pdf-modal-external-link');
+
+      title.textContent = fileName || 'เอกสารใบส่งของ (PDF)';
+      extLink.href = url;
+
+      // จัดการ URL สำหรับ Iframe
+      let previewSrc = url;
+      if (url.includes('drive.google.com') && !url.includes('/preview')) {
+        previewSrc = url.replace(/\/view.*$/, '/preview');
+      }
+
+      loading.classList.remove('hidden');
+      iframe.src = previewSrc;
+
+      iframe.onload = () => {
+        loading.classList.add('hidden');
+      };
+
+      modal.classList.remove('hidden');
+    }
+
+    function closePdfModal() {
+      const modal = document.getElementById('pdf-modal');
+      const iframe = document.getElementById('pdf-modal-iframe');
+      iframe.src = '';
+      modal.classList.add('hidden');
+    }
+
+    // กรองตามสถานะ
+    function filterByStatus(status) {
+      currentStatusFilter = status;
+      ['all', 'rent', 'spare', 'expired'].forEach(st => {
+        const btn = document.getElementById(`btn-tab-${st}`);
+        const card = document.getElementById(`kpi-card-${st}`);
+        if (st === status) {
+          if (btn) btn.className = 'px-3.5 py-2 rounded-xl bg-white text-indigo-950 shadow-xs transition-all font-bold cursor-pointer';
+          if (card) {
+            card.classList.add('ring-2', 'ring-indigo-500', 'bg-white', 'shadow-md');
+          }
+        } else {
+          if (btn) btn.className = 'px-3.5 py-2 rounded-xl text-slate-600 hover:text-slate-950 hover:bg-white/50 transition-all font-semibold cursor-pointer';
+          if (card) {
+            card.classList.remove('ring-2', 'ring-indigo-500', 'shadow-md');
+          }
+        }
+      });
+      applyFilters();
+    }
+
+    let searchDebounceTimer = null;
+    function handleSearch(val) {
+      searchQuery = val;
+      const clearBtn = document.getElementById('btn-clear-search');
+      if (val) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+      
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        applyFilters();
+      }, 100);
+    }
+
+    function clearSearch() {
+      const input = document.getElementById('search-input');
+      input.value = '';
+      clearTimeout(searchDebounceTimer);
+      searchQuery = '';
+      const clearBtn = document.getElementById('btn-clear-search');
+      clearBtn.classList.add('hidden');
+      applyFilters();
+    }
+
+    function copyToClipboard(text, btnElement) {
+      if (!text || text === '-') return;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(`คัดลอก S/N: ${text} สำเร็จ`);
+        if (btnElement) {
+          const originalHtml = btnElement.innerHTML;
+          btnElement.innerHTML = `
+            <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+            </svg>
+          `;
+          btnElement.classList.add('bg-emerald-50', 'text-emerald-600', 'ring-1', 'ring-emerald-300');
+          setTimeout(() => {
+            btnElement.innerHTML = originalHtml;
+            btnElement.classList.remove('bg-emerald-50', 'text-emerald-600', 'ring-1', 'ring-emerald-300');
+          }, 1500);
+        }
+      });
+    }
+
+    // ⌨️ Keyboard Shortcuts (/ to search, Esc to clear / close modal)
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) searchInput.focus();
+      } else if (e.key === 'Escape') {
+        const modal = document.getElementById('pdf-modal');
+        if (modal && !modal.classList.contains('hidden')) {
+          closePdfModal();
+        } else {
+          clearSearch();
+        }
+      }
+    });
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-message');
+      toastMsg.textContent = msg;
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2000);
+    }
+
+    function exportToExcel() {
+      if (typeof XLSX === 'undefined') {
+        showToast('⏳ กำลังโหลด SheetJS สำหรับ Export Excel...');
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+        s.onload = () => doExportToExcel();
+        document.head.appendChild(s);
+        return;
+      }
+      doExportToExcel();
+    }
+
+    function doExportToExcel() {
+      const dataToExport = currentFiltered.map((i, idx) => ({
+        "ลำดับ": idx + 1,
+        "บริษัท/สาขา": i.company || "-",
+        "ประเภท": i._category.label,
+        "ยี่ห้อ": i._brand.name,
+        "รุ่น (Model)": i.model || "-",
+        "สเปก": i.spec || "-",
+        "Serial Number": i.sn || "-",
+        "รหัสทรัพย์สินลูกค้า": i.tag || "-",
+        "ใบเสนอราคา": i.quotation || "-",
+        "วันเริ่มเช่า": i._dateStartClean || "-",
+        "วันหมดสัญญา": i._dateExpireClean || "-",
+        "สถานะสัญญา": i._statusLabel,
+        "ประวัติสลับเครื่อง": i.qref || "-"
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Assets");
+      const comp = RAW_PORTAL_DATA.companyName || 'WKT_Client';
+      XLSX.writeFile(wb, `รายการทรัพย์สิน_${comp}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>

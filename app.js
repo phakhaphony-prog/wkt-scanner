@@ -28,6 +28,12 @@ let recentScansList = [];
 const STORAGE_KEY_API_URL = 'wkt_pwa_api_url';
 const DEFAULT_GATEWAY_URL = 'https://script.google.com/a/macros/welkintouch.com/s/AKfycbxyKN6ldirk2cBxst_pbNAdJG8DYAlK7F9wMyzRgCodJ5R9qiSYh5zmwhuMG_vslNSg/exec';
 let apiUrl = localStorage.getItem(STORAGE_KEY_API_URL) || DEFAULT_GATEWAY_URL;
+const WKT_API_KEY = "WKT-SCAN-SECURE-2026";
+
+function appendApiKey(url) {
+    if (!url) return '';
+    return url + (url.includes('?') ? '&' : '?') + 'apiKey=' + encodeURIComponent(WKT_API_KEY);
+}
 
 // PWA Install prompt event
 let deferredInstallPrompt = null;
@@ -2383,6 +2389,7 @@ async function lookupBatchSns(snList, onUpdateCallback) {
     try {
         const postData = {
             action: 'lookupSnBatch',
+            apiKey: WKT_API_KEY,
             snList: stillMissing
         };
         const res = await fetch(apiUrl, {
@@ -2414,7 +2421,7 @@ async function lookupBatchSns(snList, onUpdateCallback) {
             for (let j = 0; j < Math.min(stillMissing.length, 12); j++) {
                 const s = stillMissing[j];
                 try {
-                    const r = await fetch(`${apiUrl}?action=lookupSn&sn=${encodeURIComponent(s)}`);
+                    const r = await fetch(appendApiKey(`${apiUrl}?action=lookupSn&sn=${encodeURIComponent(s)}`));
                     const d = await r.json();
                     if (d && d.success && d.item) {
                         if (isAssetSold(d.item)) {
@@ -2918,7 +2925,7 @@ async function lookupDeviceBySn(sn) {
 
         // Background update quotation/latest info asynchronously without blocking UI
         if (apiUrl) {
-            fetch(`${apiUrl}?action=lookupSn&sn=${encodeURIComponent(sn)}`)
+            fetch(appendApiKey(`${apiUrl}?action=lookupSn&sn=${encodeURIComponent(sn)}`))
                 .then(r => r.json())
                 .then(data => {
                     if (data && data.success && data.item) {
@@ -2939,7 +2946,7 @@ async function lookupDeviceBySn(sn) {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s timeout max
 
-            const queryUrl = `${apiUrl}?action=lookupSn&sn=${encodeURIComponent(sn)}`;
+            const queryUrl = appendApiKey(`${apiUrl}?action=lookupSn&sn=${encodeURIComponent(sn)}`);
             const response = await fetch(queryUrl, { signal: controller.signal });
             clearTimeout(timeoutId);
             const data = await response.json();
@@ -3539,7 +3546,7 @@ async function renderQuotationDoc(item) {
 
     if (apiUrl) {
         try {
-            const docUrl = `${apiUrl}?action=getDeliveryDoc&quotation=${encodeURIComponent(quotation)}`;
+            const docUrl = appendApiKey(`${apiUrl}?action=getDeliveryDoc&quotation=${encodeURIComponent(quotation)}`);
             fetch(docUrl)
                 .then(r => r.json())
                 .then(res => {
@@ -3977,7 +3984,7 @@ window.openQuotationPdfModal = async function(customDoc) {
     if (!doc && quotation && quotation !== '-') {
         if (apiUrl) {
             try {
-                const r = await fetch(`${apiUrl}?action=getDeliveryDoc&quotation=${encodeURIComponent(quotation)}`);
+                const r = await fetch(appendApiKey(`${apiUrl}?action=getDeliveryDoc&quotation=${encodeURIComponent(quotation)}`));
                 const res = await r.json();
                 if (res && res.success && res.found && res.doc) {
                     doc = res.doc;
@@ -4055,7 +4062,7 @@ window.openQuotationPdfModal = async function(customDoc) {
         // 3. ดึง getPdfBase64 จาก Apps Script Backend (กรณีไฟล์ต้องการสิทธิ์พิเศษ)
         if (apiUrl) {
             try {
-                const fetchUrl = `${apiUrl}?action=getPdfBase64${fileId ? `&fileId=${encodeURIComponent(fileId)}` : `&quotation=${encodeURIComponent(quotation)}`}`;
+                const fetchUrl = appendApiKey(`${apiUrl}?action=getPdfBase64${fileId ? `&fileId=${encodeURIComponent(fileId)}` : `&quotation=${encodeURIComponent(quotation)}`}`);
                 const b64Res = await fetch(fetchUrl);
                 const b64Json = await b64Res.json();
 
@@ -4138,6 +4145,7 @@ window.confirmSubmitBatchToAdmin = async function() {
     try {
         const payload = {
             action: 'submitPendingBatch',
+            apiKey: WKT_API_KEY,
             sender: sender,
             batchType: batchType,
             targetStock: targetStock,
@@ -4366,7 +4374,7 @@ window.syncAllSheetData = async function(manual) {
     if (badge) badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-spin"></span><span>กำลังซิงค์ชีต...</span>';
 
     try {
-        const res = await fetch(`${apiUrl}?action=getAssetData`);
+        const res = await fetch(appendApiKey(`${apiUrl}?action=getAssetData`));
         const data = await res.json();
 
         if (data && data.success) {
