@@ -1078,7 +1078,7 @@
           const docUrl = item.qDoc.previewUrl || item.qDoc.fileUrl;
           const fn = item.qDoc.fileName || 'ใบส่งของ.pdf';
           pdfButtonHtml = `
-            <button onclick="openPdfModal('${escapeHtml(docUrl)}', '${escapeHtml(fn)}')" title="คลิกเปิดดูไฟล์ PDF ใบส่งของที่เซ็นรับแล้ว" class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded border border-emerald-300 transition-all cursor-pointer shadow-2xs mt-1">
+            <button onclick="openPdfModal(decodeURIComponent('${encodeURIComponent(docUrl)}'), decodeURIComponent('${encodeURIComponent(fn)}'))" title="คลิกเปิดดูไฟล์ PDF ใบส่งของที่เซ็นรับแล้ว" class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded border border-emerald-300 transition-all cursor-pointer shadow-2xs mt-1">
               <span>📄 มีใบส่งของ</span>
             </button>
           `;
@@ -1207,7 +1207,7 @@
                 ${escapeHtml(item.quotation || '-')}
               </span>
               ${item.qDoc && item.qDoc.fileUrl ? `
-                <button onclick="openPdfModal('${escapeHtml(item.qDoc.previewUrl || item.qDoc.fileUrl)}', '${escapeHtml(item.qDoc.fileName || 'ใบส่งของ.pdf')}')" class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                <button onclick="openPdfModal(decodeURIComponent('${encodeURIComponent(item.qDoc.previewUrl || item.qDoc.fileUrl)}'), decodeURIComponent('${encodeURIComponent(item.qDoc.fileName || 'ใบส่งของ.pdf')}'))" class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
                   📄 ใบส่งของ
                 </button>
               ` : ''}
